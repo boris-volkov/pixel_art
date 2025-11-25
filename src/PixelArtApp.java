@@ -2,6 +2,8 @@ import javax.swing.JFrame;
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.AbstractAction;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -18,6 +20,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Rectangle;
@@ -37,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 public class PixelArtApp {
@@ -59,8 +63,11 @@ public class PixelArtApp {
     private static final int TARGET_CANVAS_SIZE = 640;
     private static final int MIN_CELL_SIZE = 2;
     private static final int MAX_CELL_SIZE = 20;
+    private enum ToolMode {BRUSH, STAMP}
 
     private PixelCanvas canvas;
+    private PixelCanvas stampCanvas;
+    private TopBar topBar;
     private JPanel canvasHolder;
     private ControlBar controlBar;
     private int red = 32;
@@ -69,6 +76,7 @@ public class PixelArtApp {
     private int brushSize = 1;
     private int gridSize = 128;
     private Console console;
+    private ToolMode toolMode = ToolMode.BRUSH;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -82,9 +90,13 @@ public class PixelArtApp {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.getContentPane().setBackground(BG);
 
-        canvas = new PixelCanvas(gridSize, gridSize, computeCellSizeForGrid(gridSize), this::setBrushColor, this::onBrushSizeChanged);
+        canvas = new PixelCanvas(gridSize, gridSize, computeCellSizeForGrid(gridSize), this::setBrushColor, this::onBrushSizeChanged, () -> toolMode, this::getStampPixels);
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
+
+        stampCanvas = new PixelCanvas(16, 16, 10, this::setBrushColor, size -> {
+        }, () -> ToolMode.BRUSH, null);
+        stampCanvas.setCurrentColor(currentBrushColor());
 
         canvasHolder = new JPanel(new GridBagLayout());
         canvasHolder.setBackground(BG);
@@ -98,8 +110,29 @@ public class PixelArtApp {
         controlBar = new ControlBar();
         console = new Console();
 
+        JPanel east = new JPanel(new BorderLayout());
+        east.setBackground(BG);
+        JPanel topRow = new JPanel();
+        topRow.setOpaque(false);
+        topRow.setLayout(new BoxLayout(topRow, BoxLayout.X_AXIS));
+        topRow.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        topBar = new TopBar();
+        JPanel stampHolder = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        stampHolder.setOpaque(false);
+        stampCanvas.setBorder(BorderFactory.createLineBorder(BUTTON_BORDER));
+        stampHolder.add(stampCanvas);
+
+        topRow.add(topBar);
+        topRow.add(Box.createRigidArea(new Dimension(8, 1)));
+        topRow.add(stampHolder);
+        JPanel topWrap = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 8));
+        topWrap.setOpaque(false);
+        topWrap.add(topRow);
+        east.add(topWrap, BorderLayout.NORTH);
+        east.add(controlBar, BorderLayout.CENTER);
+
         frame.add(canvasHolder, BorderLayout.CENTER);
-        frame.add(controlBar, BorderLayout.EAST);
+        frame.add(east, BorderLayout.EAST);
         frame.add(console, BorderLayout.SOUTH);
 
         frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
@@ -139,6 +172,22 @@ public class PixelArtApp {
         return new Color(red, green, blue);
     }
 
+    private void updateBrushTargets() {
+        updateBrushTargets(currentBrushColor());
+    }
+
+    private void updateBrushTargets(Color color) {
+        if (canvas != null) {
+            canvas.setCurrentColor(color);
+        }
+        if (stampCanvas != null) {
+            stampCanvas.setCurrentColor(color);
+        }
+        if (topBar != null) {
+            topBar.repaint();
+        }
+    }
+
     private void setBrushColor(Color color) {
         if (color == null) {
             return;
@@ -146,7 +195,7 @@ public class PixelArtApp {
         red = clamp(color.getRed());
         green = clamp(color.getGreen());
         blue = clamp(color.getBlue());
-        canvas.setCurrentColor(color);
+        updateBrushTargets(color);
         controlBar.syncSliders();
     }
 
@@ -157,9 +206,23 @@ public class PixelArtApp {
         }
     }
 
+    private void adjustBrushBrightnessGlobal(int delta) {
+        red = clamp(red + delta);
+        green = clamp(green + delta);
+        blue = clamp(blue + delta);
+        updateBrushTargets();
+        if (controlBar != null) {
+            controlBar.syncSliders();
+        }
+    }
+
+    private Color[][] getStampPixels() {
+        return stampCanvas != null ? stampCanvas.getPixelsCopy() : null;
+    }
+
     private void rebuildCanvas(int newGridSize) {
         gridSize = newGridSize;
-        PixelCanvas newCanvas = new PixelCanvas(gridSize, gridSize, computeCellSizeForGrid(gridSize), this::setBrushColor, this::onBrushSizeChanged);
+        PixelCanvas newCanvas = new PixelCanvas(gridSize, gridSize, computeCellSizeForGrid(gridSize), this::setBrushColor, this::onBrushSizeChanged, () -> toolMode, this::getStampPixels);
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
@@ -183,17 +246,17 @@ public class PixelArtApp {
         private final Font smallFont = new Font("Lucida Console", Font.PLAIN, 12);
         private final SliderControl redSlider = new SliderControl("R", 0, 255, red, v -> {
             red = v;
-            canvas.setCurrentColor(currentBrushColor());
+            updateBrushTargets();
             repaint();
         });
         private final SliderControl greenSlider = new SliderControl("G", 0, 255, green, v -> {
             green = v;
-            canvas.setCurrentColor(currentBrushColor());
+            updateBrushTargets();
             repaint();
         });
         private final SliderControl blueSlider = new SliderControl("B", 0, 255, blue, v -> {
             blue = v;
-            canvas.setCurrentColor(currentBrushColor());
+            updateBrushTargets();
             repaint();
         });
         private final SliderControl brushSlider = new SliderControl("Brush", 1, 64, brushSize, v -> {
@@ -201,17 +264,21 @@ public class PixelArtApp {
             canvas.setBrushSize(brushSize);
             repaint();
         });
-        private final ActionButton brushDimButton = new ActionButton("-", () -> adjustBrushBrightness(-BRUSH_BRIGHT_STEP), false);
-        private final ActionButton brushBrightButton = new ActionButton("+", () -> adjustBrushBrightness(BRUSH_BRIGHT_STEP), false);
+        private final ActionButton modeButton = new ActionButton("BRUSH", this::toggleMode, true);
+        private final ActionButton stampClearButton = new ActionButton("S-CLR", () -> {
+            if (stampCanvas != null) {
+                stampCanvas.clear();
+            }
+        }, true);
         private final List<ActionButton> buttons = List.of(
                 new ActionButton("Fill", () -> canvas.fill(currentBrushColor()), true),
                 new ActionButton("Clear", canvas::clear, true),
-                new ActionButton("C-", () -> canvas.adjustAll(color -> adjustChannel(color, -COLOR_STEP, 0, 0)), false),
-                new ActionButton("C+", () -> canvas.adjustAll(color -> adjustChannel(color, COLOR_STEP, 0, 0)), false),
-                new ActionButton("M-", () -> canvas.adjustAll(color -> adjustChannel(color, 0, -COLOR_STEP, 0)), false),
-                new ActionButton("M+", () -> canvas.adjustAll(color -> adjustChannel(color, 0, COLOR_STEP, 0)), false),
-                new ActionButton("Y-", () -> canvas.adjustAll(color -> adjustChannel(color, 0, 0, -COLOR_STEP)), false),
-                new ActionButton("Y+", () -> canvas.adjustAll(color -> adjustChannel(color, 0, 0, COLOR_STEP)), false),
+                new ActionButton("C-", () -> canvas.adjustAll(color -> adjustChannel(color, COLOR_STEP, 0, 0)), false),
+                new ActionButton("C+", () -> canvas.adjustAll(color -> adjustChannel(color, -COLOR_STEP, 0, 0)), false),
+                new ActionButton("M-", () -> canvas.adjustAll(color -> adjustChannel(color, 0, COLOR_STEP, 0)), false),
+                new ActionButton("M+", () -> canvas.adjustAll(color -> adjustChannel(color, 0, -COLOR_STEP, 0)), false),
+                new ActionButton("Y-", () -> canvas.adjustAll(color -> adjustChannel(color, 0, 0, COLOR_STEP)), false),
+                new ActionButton("Y+", () -> canvas.adjustAll(color -> adjustChannel(color, 0, 0, -COLOR_STEP)), false),
                 new ActionButton("B-", () -> canvas.adjustAll(color -> adjustBrightness(color, -BRIGHT_STEP)), false),
                 new ActionButton("B+", () -> canvas.adjustAll(color -> adjustBrightness(color, BRIGHT_STEP)), false)
         );
@@ -266,6 +333,17 @@ public class PixelArtApp {
             repaint();
         }
 
+        private void updateBrushTargets() {
+            Color c = currentBrushColor();
+            canvas.setCurrentColor(c);
+            if (stampCanvas != null) {
+                stampCanvas.setCurrentColor(c);
+            }
+            if (topBar != null) {
+                topBar.repaint();
+            }
+        }
+
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
@@ -278,26 +356,8 @@ public class PixelArtApp {
             int y = padding;
             int availableWidth = getWidth() - padding * 2;
 
-            // Swatch
-            int swatchSize = 58;
-            g2.setColor(currentBrushColor());
-            g2.fillRoundRect(padding, y, swatchSize, swatchSize, 8, 8);
-            g2.setColor(BUTTON_BORDER);
-            g2.drawRoundRect(padding, y, swatchSize, swatchSize, 8, 8);
-
-            int miniBtnW = 30;
-            int miniBtnH = 22;
-            int miniGap = 6;
-            int miniX = padding + swatchSize + 12;
-            int miniY = y + swatchSize - miniBtnH;
-
-            brushDimButton.bounds = new Rectangle(miniX, miniY, miniBtnW, miniBtnH);
-            brushBrightButton.bounds = new Rectangle(miniX + miniBtnW + miniGap, miniY, miniBtnW, miniBtnH);
-            paintButton(g2, brushDimButton);
-            paintButton(g2, brushBrightButton);
-
-            y += swatchSize + 12;
-
+            // Start below top padding
+            y += 8;
             y = drawSlider(g2, redSlider, padding, y, availableWidth);
             y = drawSlider(g2, greenSlider, padding, y, availableWidth);
             y = drawSlider(g2, blueSlider, padding, y, availableWidth);
@@ -310,9 +370,10 @@ public class PixelArtApp {
         }
 
         private int drawSlider(Graphics2D g2, SliderControl slider, int padding, int y, int width) {
-            int trackHeight = 10;
-            int thumbWidth = 10;
-            int thumbHeight = 18;
+            int scale = 2; // pixel font scale
+            int trackHeight = 6 * scale;
+            int thumbWidth = 4 * scale;
+            int thumbHeight = 7 * scale;
             int labelWidth = 90;
             int valueWidth = 0;
             int btnWidth = 24;
@@ -332,20 +393,26 @@ public class PixelArtApp {
             String valueText = String.valueOf(slider.value);
             g2.drawString(slider.label + " : " + valueText, padding, trackY + 8);
 
+            // Pixel-style track
             g2.setColor(BUTTON_BG);
-            g2.fillRoundRect(trackX, trackY, trackWidth, trackHeight, trackHeight, trackHeight);
+            g2.fillRect(trackX, trackY, trackWidth, trackHeight);
             g2.setColor(BUTTON_BORDER);
-            g2.drawRoundRect(trackX, trackY, trackWidth, trackHeight, trackHeight, trackHeight);
+            g2.drawRect(trackX, trackY, trackWidth, trackHeight);
 
             double fillRatio = slider.ratio();
             int fillWidth = (int) (trackWidth * fillRatio);
             g2.setColor(ACCENT);
-            g2.fillRoundRect(trackX, trackY, fillWidth, trackHeight, trackHeight, trackHeight);
+            g2.fillRect(trackX, trackY, fillWidth, trackHeight);
 
-            g2.setColor(BUTTON_ACTIVE);
-            g2.fillRoundRect(slider.thumb.x, slider.thumb.y, slider.thumb.width, slider.thumb.height, 4, 4);
-            g2.setColor(BUTTON_BORDER);
-            g2.drawRoundRect(slider.thumb.x, slider.thumb.y, slider.thumb.width, slider.thumb.height, 4, 4);
+            // Chunky pixel thumb (just a solid rect)
+            Color thumbColor = new Color(
+                    Math.min(255, ACCENT.getRed() + 40),
+                    Math.min(255, ACCENT.getGreen() + 40),
+                    Math.min(255, ACCENT.getBlue() + 40));
+            g2.setColor(thumbColor);
+            g2.fillRect(slider.thumb.x, slider.thumb.y, slider.thumb.width, slider.thumb.height);
+            g2.setColor(ACCENT);
+            g2.drawRect(slider.thumb.x, slider.thumb.y, slider.thumb.width, slider.thumb.height);
 
             // minus / plus buttons
             slider.minus.bounds = new Rectangle(trackX - btnWidth - gap, trackY - 6, btnWidth, 22);
@@ -360,6 +427,10 @@ public class PixelArtApp {
             int btnHeight = 32;
             int spacing = 6;
 
+            modeButton.bounds = new Rectangle(padding, y, width, btnHeight);
+            paintButton(g2, modeButton);
+            y += btnHeight + spacing + 4;
+
             // Fill / Clear side-by-side
             int btnWidthFull = (width - spacing) / 2;
             ActionButton fill = buttons.get(0);
@@ -368,6 +439,11 @@ public class PixelArtApp {
             paintButton(g2, fill);
             clear.bounds = new Rectangle(padding + btnWidthFull + spacing, y, btnWidthFull, btnHeight);
             paintButton(g2, clear);
+            y += btnHeight + spacing + 4;
+
+            // Clear Stamp full width
+            stampClearButton.bounds = new Rectangle(padding, y, width, btnHeight);
+            paintButton(g2, stampClearButton);
             y += btnHeight + spacing + 4;
 
             // 4x2 grid: C, M, Y, Bright (minus on top, plus bottom)
@@ -442,28 +518,18 @@ public class PixelArtApp {
             return new Dimension(CONTROL_BAR_WIDTH, 0);
         }
 
-        private void adjustBrushBrightness(int delta) {
-            red = clamp(red + delta);
-            green = clamp(green + delta);
-            blue = clamp(blue + delta);
-            redSlider.value = red;
-            greenSlider.value = green;
-            blueSlider.value = blue;
-            canvas.setCurrentColor(currentBrushColor());
-            repaint();
-        }
-
         private ActionButton findButtonAt(int x, int y) {
+            if (modeButton.bounds != null && modeButton.bounds.contains(x, y)) {
+                return modeButton;
+            }
+            if (stampClearButton.bounds != null && stampClearButton.bounds.contains(x, y)) {
+                return stampClearButton;
+            }
             for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, brushSlider)) {
                 for (ActionButton b : List.of(s.minus, s.plus)) {
                     if (b.bounds != null && b.bounds.contains(x, y)) {
                         return b;
                     }
-                }
-            }
-            for (ActionButton button : List.of(brushDimButton, brushBrightButton)) {
-                if (button.bounds != null && button.bounds.contains(x, y)) {
-                    return button;
                 }
             }
             for (ActionButton button : buttons) {
@@ -511,6 +577,12 @@ public class PixelArtApp {
                 return YELLOW_BTN;
             }
             return accent ? ACCENT.darker() : BUTTON_BG;
+        }
+
+        private void toggleMode() {
+            toolMode = (toolMode == ToolMode.BRUSH) ? ToolMode.STAMP : ToolMode.BRUSH;
+            modeButton.label = (toolMode == ToolMode.BRUSH) ? "BRUSH" : "STAMP";
+            repaint();
         }
     }
 
@@ -661,7 +733,7 @@ public class PixelArtApp {
     }
 
     private static class ActionButton {
-        final String label;
+        String label;
         final Runnable action;
         final boolean accent;
         Rectangle bounds;
@@ -672,6 +744,116 @@ public class PixelArtApp {
             this.label = label;
             this.action = action;
             this.accent = accent;
+        }
+    }
+
+    /**
+     * Small swatch + brightness control sitting above the stamp.
+     */
+    private class TopBar extends JComponent {
+        private final ActionButton plus = new ActionButton("+", () -> adjustBrushBrightnessGlobal(BRUSH_BRIGHT_STEP), false);
+        private final ActionButton minus = new ActionButton("-", () -> adjustBrushBrightnessGlobal(-BRUSH_BRIGHT_STEP), false);
+        private ActionButton active;
+        private final Timer repeatTimer;
+
+        TopBar() {
+            setOpaque(false);
+            setPreferredSize(new Dimension(120, 90));
+            repeatTimer = new Timer(120, e -> {
+                if (active != null) {
+                    active.action.run();
+                }
+            });
+            repeatTimer.setInitialDelay(350);
+            MouseAdapter mouse = new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    ActionButton target = hit(e.getX(), e.getY());
+                    if (target != null) {
+                        press(target);
+                    }
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    release();
+                }
+            };
+            addMouseListener(mouse);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int padding = 8;
+            int swatchSize = 52;
+            int btnW = 24;
+            int btnH = 22;
+            int gap = 8;
+
+            int contentWidth = Math.max(swatchSize, btnW * 2 + gap);
+            int contentHeight = swatchSize + gap + btnH;
+            int startX = (getWidth() - contentWidth) / 2;
+            int startY = (getHeight() - contentHeight) / 2;
+
+            // Swatch (square, no rounding)
+            g2.setColor(currentBrushColor());
+            g2.fillRect(startX, startY, swatchSize, swatchSize);
+            g2.setColor(BUTTON_BORDER);
+            g2.drawRect(startX, startY, swatchSize, swatchSize);
+
+            int btnY = startY + swatchSize + gap;
+            int btnX = startX + Math.max(0, (swatchSize - (btnW * 2 + gap)) / 2);
+            minus.bounds = new Rectangle(btnX, btnY, btnW, btnH);
+            plus.bounds = new Rectangle(btnX + btnW + gap, btnY, btnW, btnH);
+
+            paintTopButton(g2, plus);
+            paintTopButton(g2, minus);
+
+            g2.dispose();
+        }
+
+        private void paintTopButton(Graphics2D g2, ActionButton button) {
+            Color base = button.accent ? ACCENT : BUTTON_BG;
+            Color hover = button.accent ? ACCENT.brighter() : BUTTON_HOVER;
+            Color pressed = button.accent ? ACCENT.darker() : BUTTON_ACTIVE;
+            Color fill = base;
+            if (button.pressed) {
+                fill = pressed;
+            } else if (button.hover) {
+                fill = hover;
+            }
+            g2.setColor(fill);
+            g2.fillRect(button.bounds.x, button.bounds.y, button.bounds.width, button.bounds.height);
+            g2.setColor(TEXT);
+            PixelFont.draw(g2, button.label, button.bounds, 2, TEXT);
+        }
+
+        private ActionButton hit(int x, int y) {
+            for (ActionButton b : new ActionButton[]{plus, minus}) {
+                if (b.bounds != null && b.bounds.contains(x, y)) {
+                    return b;
+                }
+            }
+            return null;
+        }
+
+        private void press(ActionButton button) {
+            active = button;
+            button.pressed = true;
+            repaint(button.bounds);
+            button.action.run();
+            repeatTimer.restart();
+        }
+
+        private void release() {
+            repeatTimer.stop();
+            if (active != null) {
+                active.pressed = false;
+                repaint(active.bounds);
+            }
+            active = null;
         }
     }
 
@@ -687,19 +869,24 @@ public class PixelArtApp {
         private final int undoLimit = 30;
         private final java.util.function.Consumer<Color> pickCallback;
         private final IntConsumer brushChangeCallback;
+        private final Supplier<ToolMode> modeSupplier;
+        private final Supplier<Color[][]> stampSupplier;
         private Color currentColor = Color.BLACK;
         private int brushSize = 1;
         private int hoverCol = -1;
         private int hoverRow = -1;
         private boolean strokeActive = false;
 
-        PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback, IntConsumer brushChangeCallback) {
+        PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback, IntConsumer brushChangeCallback,
+                    Supplier<ToolMode> modeSupplier, Supplier<Color[][]> stampSupplier) {
             this.columns = columns;
             this.rows = rows;
             this.cellSize = cellSize;
             this.pixels = new Color[rows][columns];
             this.pickCallback = pickCallback;
             this.brushChangeCallback = brushChangeCallback;
+            this.modeSupplier = modeSupplier;
+            this.stampSupplier = stampSupplier;
             setPreferredSize(new Dimension(columns * cellSize, rows * cellSize));
             setBackground(CANVAS_BG);
             enablePainting();
@@ -849,6 +1036,12 @@ public class PixelArtApp {
         }
 
         private void applyBrush(int column, int row) {
+            ToolMode mode = modeSupplier != null ? modeSupplier.get() : ToolMode.BRUSH;
+            if (mode == ToolMode.STAMP && stampSupplier != null) {
+                applyStamp(column, row);
+                return;
+            }
+
             int half = brushSize / 2;
             int startCol = column - half;
             int startRow = row - half;
@@ -866,6 +1059,36 @@ public class PixelArtApp {
                 }
             }
 
+            int x = startCol * cellSize;
+            int y = startRow * cellSize;
+            int w = (endCol - startCol + 1) * cellSize;
+            int h = (endRow - startRow + 1) * cellSize;
+            repaint(new Rectangle(x, y, w, h));
+        }
+
+        private void applyStamp(int column, int row) {
+            Color[][] stamp = stampSupplier.get();
+            if (stamp == null) {
+                return;
+            }
+            int stampRows = stamp.length;
+            int stampCols = stamp[0].length;
+            int startCol = column - stampCols / 2;
+            int startRow = row - stampRows / 2;
+            int endCol = Math.min(columns - 1, startCol + stampCols - 1);
+            int endRow = Math.min(rows - 1, startRow + stampRows - 1);
+
+            if (startCol < 0) startCol = 0;
+            if (startRow < 0) startRow = 0;
+
+            for (int r = startRow; r <= endRow; r++) {
+                for (int c = startCol; c <= endCol; c++) {
+                    Color s = stamp[r - startRow][c - startCol];
+                    if (s != null) {
+                        pixels[r][c] = s;
+                    }
+                }
+            }
             int x = startCol * cellSize;
             int y = startRow * cellSize;
             int w = (endCol - startCol + 1) * cellSize;
@@ -938,23 +1161,58 @@ public class PixelArtApp {
             }
 
             if (hoverCol >= 0 && hoverRow >= 0) {
-                int half = brushSize / 2;
-                int startCol = Math.max(0, hoverCol - half);
-                int startRow = Math.max(0, hoverRow - half);
-                int endCol = Math.min(columns - 1, startCol + brushSize - 1);
-                int endRow = Math.min(rows - 1, startRow + brushSize - 1);
+                if (isStampMode()) {
+                    Color[][] stamp = stampSupplier.get();
+                    if (stamp != null) {
+                        int stampRows = stamp.length;
+                        int stampCols = stamp[0].length;
+                        int startCol = hoverCol - stampCols / 2;
+                        int startRow = hoverRow - stampRows / 2;
+                        int endCol = Math.min(columns - 1, startCol + stampCols - 1);
+                        int endRow = Math.min(rows - 1, startRow + stampRows - 1);
+                        if (startCol < 0) startCol = 0;
+                        if (startRow < 0) startRow = 0;
 
-                int x = startCol * cellSize;
-                int y = startRow * cellSize;
-                int w = (endCol - startCol + 1) * cellSize;
-                int h = (endRow - startRow + 1) * cellSize;
+                        for (int r = startRow; r <= endRow; r++) {
+                            for (int c = startCol; c <= endCol; c++) {
+                                Color s = stamp[r - startRow][c - startCol];
+                                if (s != null) {
+                                    g2.setColor(new Color(s.getRed(), s.getGreen(), s.getBlue(), 120));
+                                    g2.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                                }
+                            }
+                        }
+                        int x = startCol * cellSize;
+                        int y = startRow * cellSize;
+                        int w = (endCol - startCol + 1) * cellSize;
+                        int h = (endRow - startRow + 1) * cellSize;
+                        g2.setColor(new Color(ACCENT.getRed(), ACCENT.getGreen(), ACCENT.getBlue(), 180));
+                        g2.setStroke(new BasicStroke(2f));
+                        g2.drawRect(x, y, w - 1, h - 1);
+                    }
+                } else {
+                    int half = brushSize / 2;
+                    int startCol = Math.max(0, hoverCol - half);
+                    int startRow = Math.max(0, hoverRow - half);
+                    int endCol = Math.min(columns - 1, startCol + brushSize - 1);
+                    int endRow = Math.min(rows - 1, startRow + brushSize - 1);
 
-                g2.setColor(new Color(ACCENT.getRed(), ACCENT.getGreen(), ACCENT.getBlue(), 140));
-                g2.setStroke(new BasicStroke(2f));
-                g2.drawRect(x, y, w - 1, h - 1);
+                    int x = startCol * cellSize;
+                    int y = startRow * cellSize;
+                    int w = (endCol - startCol + 1) * cellSize;
+                    int h = (endRow - startRow + 1) * cellSize;
+
+                    g2.setColor(new Color(ACCENT.getRed(), ACCENT.getGreen(), ACCENT.getBlue(), 140));
+                    g2.setStroke(new BasicStroke(2f));
+                    g2.drawRect(x, y, w - 1, h - 1);
+                }
             }
 
             g2.dispose();
+        }
+
+        private boolean isStampMode() {
+            return modeSupplier != null && modeSupplier.get() == ToolMode.STAMP;
         }
 
         BufferedImage toImage() {
@@ -969,6 +1227,14 @@ public class PixelArtApp {
                 }
             }
             return img;
+        }
+
+        Color[][] getPixelsCopy() {
+            Color[][] copy = new Color[rows][columns];
+            for (int r = 0; r < rows; r++) {
+                copy[r] = Arrays.copyOf(pixels[r], columns);
+            }
+            return copy;
         }
 
         void undo() {
