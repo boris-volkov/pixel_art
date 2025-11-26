@@ -1,5 +1,5 @@
 import javax.swing.JComponent;
-import javax.swing.Timer;
+import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -9,106 +9,73 @@ import java.awt.event.MouseEvent;
 
 class TopBar extends JComponent {
     private final PixelArtApp app;
-    private final ActionButton plus;
-    private final ActionButton minus;
-    private ActionButton active;
-    private final Timer repeatTimer;
+    private final Rectangle[] swatchRects = new Rectangle[3];
 
     TopBar(PixelArtApp app) {
         this.app = app;
-        this.plus = new ActionButton("+", () -> app.adjustBrushBrightnessGlobal(PixelArtApp.BRUSH_BRIGHT_STEP), false);
-        this.minus = new ActionButton("-", () -> app.adjustBrushBrightnessGlobal(-PixelArtApp.BRUSH_BRIGHT_STEP), false);
         setOpaque(false);
-        setPreferredSize(new java.awt.Dimension(120, 90));
-        repeatTimer = new Timer(120, e -> {
-            if (active != null) {
-                active.action.run();
-            }
-        });
-        repeatTimer.setInitialDelay(350);
-        MouseAdapter mouse = new MouseAdapter() {
+        setPreferredSize(new java.awt.Dimension(140, 140));
+
+        addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                ActionButton target = hit(e.getX(), e.getY());
-                if (target != null) {
-                    press(target);
+                Color[] palette = buildPalette();
+                for (int i = 0; i < swatchRects.length; i++) {
+                    Rectangle r = swatchRects[i];
+                    if (r != null && r.contains(e.getPoint())) {
+                        app.setBrushColor(palette[i]);
+                        repaint();
+                        break;
+                    }
                 }
             }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                release();
-            }
-        };
-        addMouseListener(mouse);
+        });
     }
 
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        int swatchSize = 52;
-        int btnW = 24;
-        int btnH = 22;
-        int gap = 8;
+        Color[] palette = buildPalette();
+        Color base = app.currentBrushColor();
 
-        int contentWidth = Math.max(swatchSize, btnW * 2 + gap);
-        int contentHeight = swatchSize + gap + btnH;
-        int startX = (getWidth() - contentWidth) / 2;
-        int startY = (getHeight() - contentHeight) / 2;
+        int mainSize = 56;
+        int mainX = (getWidth() - mainSize) / 2;
+        int mainY = 8;
 
-        g2.setColor(app.currentBrushColor());
-        g2.fillRect(startX, startY, swatchSize, swatchSize);
+        g2.setColor(base);
+        g2.fillRect(mainX, mainY, mainSize, mainSize);
         g2.setColor(PixelArtApp.BUTTON_BORDER);
-        g2.drawRect(startX, startY, swatchSize, swatchSize);
+        g2.drawRect(mainX, mainY, mainSize, mainSize);
 
-        int btnY = startY + swatchSize + gap;
-        int btnX = startX + Math.max(0, (swatchSize - (btnW * 2 + gap)) / 2);
-        minus.bounds = new Rectangle(btnX, btnY, btnW, btnH);
-        plus.bounds = new Rectangle(btnX + btnW + gap, btnY, btnW, btnH);
+        int smallSize = 28;
+        int gap = 6;
+        int totalWidth = smallSize * palette.length + gap * (palette.length - 1);
+        int startX = (getWidth() - totalWidth) / 2;
+        int y = mainY + mainSize + 12;
 
-        paintButton(g2, minus);
-        paintButton(g2, plus);
+        for (int i = 0; i < palette.length; i++) {
+            int x = startX + i * (smallSize + gap);
+            swatchRects[i] = new Rectangle(x, y, smallSize, smallSize);
+            g2.setColor(palette[i]);
+            g2.fillRect(x, y, smallSize, smallSize);
+            g2.setColor(PixelArtApp.BUTTON_BORDER);
+            g2.drawRect(x, y, smallSize, smallSize);
+        }
 
         g2.dispose();
     }
 
-    private void paintButton(Graphics2D g2, ActionButton button) {
-        java.awt.Color base = button.accent ? PixelArtApp.ACCENT : PixelArtApp.BUTTON_BG;
-        java.awt.Color hover = button.accent ? PixelArtApp.ACCENT.brighter() : PixelArtApp.BUTTON_HOVER;
-        java.awt.Color pressed = button.accent ? PixelArtApp.ACCENT.darker() : PixelArtApp.BUTTON_ACTIVE;
-        java.awt.Color fill = base;
-        if (button.pressed) fill = pressed;
-        else if (button.hover) fill = hover;
-        g2.setColor(fill);
-        g2.fillRect(button.bounds.x, button.bounds.y, button.bounds.width, button.bounds.height);
-        g2.setColor(PixelArtApp.TEXT);
-        PixelFont.draw(g2, button.label, button.bounds, 2, PixelArtApp.TEXT);
-    }
+    private Color[] buildPalette() {
+        Color base = app.currentBrushColor();
+        Color comp = new Color(255 - base.getRed(), 255 - base.getGreen(), 255 - base.getBlue());
 
-    private ActionButton hit(int x, int y) {
-        for (ActionButton b : new ActionButton[]{plus, minus}) {
-            if (b.bounds != null && b.bounds.contains(x, y)) {
-                return b;
-            }
-        }
-        return null;
-    }
+        float[] hsb = Color.RGBtoHSB(base.getRed(), base.getGreen(), base.getBlue(), null);
+        float h1 = (hsb[0] + 1f / 3f) % 1f;
+        float h2 = (hsb[0] + 2f / 3f) % 1f;
+        Color triad1 = Color.getHSBColor(h1, hsb[1], hsb[2]);
+        Color triad2 = Color.getHSBColor(h2, hsb[1], hsb[2]);
 
-    private void press(ActionButton button) {
-        active = button;
-        button.pressed = true;
-        repaint(button.bounds);
-        button.action.run();
-        repeatTimer.restart();
-    }
-
-    private void release() {
-        repeatTimer.stop();
-        if (active != null) {
-            active.pressed = false;
-            repaint(active.bounds);
-        }
-        active = null;
+        return new Color[]{comp, triad1, triad2};
     }
 }

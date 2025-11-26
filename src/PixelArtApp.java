@@ -18,6 +18,9 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
@@ -58,7 +61,7 @@ public class PixelArtApp {
     private int blue = 32;
     private int brushSize = 1;
     private int gridSize = 128;
-    private int canvasCellSize = computeCellSizeForGrid(gridSize);
+    private int canvasCellSize = computeMaxCellSizeForScreen();
     private ToolMode toolMode = ToolMode.BRUSH;
 
     public static void main(String[] args) {
@@ -73,12 +76,12 @@ public class PixelArtApp {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.getContentPane().setBackground(BG);
 
-        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::onBrushSizeChanged, this::getToolMode, this::getStampPixels, null);
+        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
 
-        stampCanvas = new PixelCanvas(16, 16, 10, this::setBrushColor, size -> {
-        }, () -> ToolMode.BRUSH, null, () -> false);
+        int stampCellSize = 10;
+        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> ToolMode.BRUSH, null, null);
         stampCanvas.setCurrentColor(currentBrushColor());
 
         canvasHolder = new JPanel(new GridBagLayout());
@@ -93,6 +96,7 @@ public class PixelArtApp {
         controlBar = new ControlBar(this);
         console = new ConsolePanel(this::handleCommand);
         topBar = new TopBar(this);
+        setCanvasCellSize(computeMaxCellSizeForScreen());
 
         JPanel east = new JPanel(new BorderLayout());
         east.setBackground(BG);
@@ -132,6 +136,9 @@ public class PixelArtApp {
 
         frame.pack();
         enterFullScreen(frame);
+
+        java.awt.Cursor cursor = createCursor();
+        frame.setCursor(cursor);
     }
 
     private static void tryInstallNimbus() {
@@ -161,6 +168,20 @@ public class PixelArtApp {
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
         }
+    }
+
+    private java.awt.Cursor createCursor() {
+        int size = 32;
+        BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = img.createGraphics();
+        g2.setColor(new Color(0, 0, 0, 0));
+        g2.fillRect(0, 0, size, size);
+
+        Rectangle bounds = new Rectangle(0, 0, size, size);
+        PixelFont.draw(g2, "+", bounds, 3, TEXT);
+        g2.dispose();
+        Point hotspot = new Point(size / 2, size / 2);
+        return Toolkit.getDefaultToolkit().createCustomCursor(img, hotspot, "pixel-plus");
     }
 
     int computeCellSizeForGrid(int grid) {
@@ -210,8 +231,8 @@ public class PixelArtApp {
 
     void rebuildCanvas(int newGridSize) {
         gridSize = newGridSize;
-        canvasCellSize = computeCellSizeForGrid(gridSize);
-        PixelCanvas newCanvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::onBrushSizeChanged, this::getToolMode, this::getStampPixels, null);
+        canvasCellSize = Math.min(canvasCellSize, computeMaxCellSizeForScreen());
+        PixelCanvas newCanvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
@@ -248,6 +269,39 @@ public class PixelArtApp {
 
     int getCanvasCellSize() {
         return canvasCellSize;
+    }
+
+    private void resampleCanvas(int factor) {
+        Color[][] old = canvas.getPixelsCopy();
+        int oldRows = canvas.getRows();
+        int oldCols = canvas.getColumns();
+        int newRows = oldRows * factor;
+        int newCols = oldCols * factor;
+        gridSize = newRows;
+        canvasCellSize = Math.min(canvasCellSize, computeMaxCellSizeForScreen());
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
+        for (int r = 0; r < newRows; r++) {
+            int srcR = Math.min(oldRows - 1, r / factor);
+            for (int c = 0; c < newCols; c++) {
+                int srcC = Math.min(oldCols - 1, c / factor);
+                Color color = old[srcR][srcC];
+                newCanvas.setPixelDirect(r, c, color);
+            }
+        }
+        newCanvas.setCurrentColor(currentBrushColor());
+        newCanvas.setBrushSize(brushSize);
+        this.canvas = newCanvas;
+
+        canvasHolder.removeAll();
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.anchor = GridBagConstraints.CENTER;
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        gbc.fill = GridBagConstraints.NONE;
+        canvasHolder.add(newCanvas, gbc);
+        canvasHolder.revalidate();
+        canvasHolder.repaint();
+        if (controlBar != null) controlBar.syncSliders();
     }
 
     int computeMaxCellSizeForScreen() {
@@ -311,13 +365,62 @@ public class PixelArtApp {
                     console.setStatus("Usage: flip h|v");
                 }
                 break;
+            case "dither":
+                if (parts.length < 2) {
+                    console.setStatus("Usage: dither floyd | dither ordered");
+                    break;
+                }
+                if ("floyd".equalsIgnoreCase(parts[1])) {
+                    canvas.ditherFloydSteinberg();
+                    console.setStatus("Applied Floyd-Steinberg dither");
+                } else if ("ordered".equalsIgnoreCase(parts[1])) {
+                    canvas.ditherOrdered();
+                    console.setStatus("Applied ordered dither (4x4)");
+                } else {
+                    console.setStatus("Usage: dither floyd | dither ordered");
+                }
+                break;
             case "help":
-                console.setStatus("Commands: save <file.png> | new <size> | flip h | flip v | exit");
+                console.setStatus("Commands: save <file.png> | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | exit");
+                break;
+            case "blur":
+                if (parts.length < 3 || !"gaussian".equalsIgnoreCase(parts[1])) {
+                    console.setStatus("Usage: blur gaussian <radius>");
+                    break;
+                }
+                try {
+                    int radius = Integer.parseInt(parts[2]);
+                    if (radius <= 0) {
+                        console.setStatus("Radius must be > 0");
+                        break;
+                    }
+                    canvas.blurGaussian(radius);
+                    console.setStatus("Applied gaussian blur r=" + radius);
+                } catch (NumberFormatException ex) {
+                    console.setStatus("Radius must be a number");
+                }
+                break;
+            case "resample":
+                if (parts.length < 2) {
+                    console.setStatus("Usage: resample <factor>");
+                    break;
+                }
+                try {
+                    int factor = Integer.parseInt(parts[1]);
+                    if (factor <= 1) {
+                        console.setStatus("Factor must be > 1");
+                        break;
+                    }
+                    resampleCanvas(factor);
+                    console.setStatus("Resampled x" + factor);
+                } catch (NumberFormatException ex) {
+                    console.setStatus("Factor must be a number");
+                }
                 break;
             case "exit":
                 System.exit(0);
             default:
-                console.setStatus("Unknown. Try: save <file.png> | new <size> | flip h | flip v | exit");
+                console.setStatus("Unknown. Try: save <file.png> | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | exit");
         }
     }
 

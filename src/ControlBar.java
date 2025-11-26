@@ -19,6 +19,8 @@ class ControlBar extends JComponent {
     private final SliderControl zoomSlider;
     private final ActionButton modeButton;
     private final ActionButton stampClearButton;
+    private final ActionButton brightMinus;
+    private final ActionButton brightPlus;
     private final List<ActionButton> buttons;
     private SliderControl activeSlider;
     private ActionButton activeButton;
@@ -59,6 +61,8 @@ class ControlBar extends JComponent {
                 app.getStampCanvas().clear();
             }
         }, true);
+        brightMinus = new ActionButton("B-", () -> app.adjustBrushBrightnessGlobal(-PixelArtApp.BRIGHT_STEP), false);
+        brightPlus = new ActionButton("B+", () -> app.adjustBrushBrightnessGlobal(PixelArtApp.BRIGHT_STEP), false);
         buttons = List.of(
                 new ActionButton("Fill", () -> app.getCanvas().fill(app.currentBrushColor()), true),
                 new ActionButton("Clear", () -> app.getCanvas().clear(), true),
@@ -132,14 +136,34 @@ class ControlBar extends JComponent {
         int availableWidth = getWidth() - padding * 2;
 
         // Top row: mode and stamp clear
-        int btnHeightTop = 30;
+        int btnHeightTop = 28;
         int gapTop = 6;
         int halfWidth = (availableWidth - gapTop) / 2;
         modeButton.bounds = new Rectangle(padding, y, halfWidth, btnHeightTop);
         stampClearButton.bounds = new Rectangle(padding + halfWidth + gapTop, y, halfWidth, btnHeightTop);
         paintButton(g2, modeButton);
         paintButton(g2, stampClearButton);
-        y += btnHeightTop + 12;
+        y += btnHeightTop + 10;
+
+        // Brightness row (aligned with sliders, no track)
+        int labelWidth = 90;
+        int btnW = 24;
+        int btnH = 22;
+        int gap = 4;
+        int trackWidth = availableWidth - labelWidth - (btnW * 2) - (gap * 3);
+        trackWidth = Math.max(30, trackWidth);
+        int trackX = padding + labelWidth + btnW + gap;
+        int rowY = y + 12;
+
+        g2.setColor(PixelArtApp.TEXT);
+        g2.drawString("Bright", padding, rowY + 8);
+
+        brightMinus.bounds = new Rectangle(trackX - btnW - gap, rowY - 6, btnW, btnH);
+        brightPlus.bounds = new Rectangle(trackX + trackWidth + gap, rowY - 6, btnW, btnH);
+        paintButton(g2, brightMinus);
+        paintButton(g2, brightPlus);
+
+        y += btnH + 14;
 
         y = drawSlider(g2, redSlider, padding, y, availableWidth);
         y = drawSlider(g2, greenSlider, padding, y, availableWidth);
@@ -293,6 +317,12 @@ class ControlBar extends JComponent {
         }
         if (stampClearButton.bounds != null && stampClearButton.bounds.contains(x, y)) {
             return stampClearButton;
+        }
+        if (brightMinus.bounds != null && brightMinus.bounds.contains(x, y)) {
+            return brightMinus;
+        }
+        if (brightPlus.bounds != null && brightPlus.bounds.contains(x, y)) {
+            return brightPlus;
         }
         for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, brushSlider, zoomSlider)) {
             for (ActionButton b : List.of(s.minus, s.plus)) {

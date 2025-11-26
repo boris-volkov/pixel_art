@@ -16,6 +16,7 @@ import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 class PixelCanvas extends javax.swing.JPanel {
+    private static final int DITHER_LEVELS = 4;
     private final int columns;
     private final int rows;
     private int cellSize;
@@ -120,6 +121,54 @@ class PixelCanvas extends javax.swing.JPanel {
         repaint();
     }
 
+    void blurGaussian(int radius) {
+        int r = Math.max(1, radius);
+        pushUndo();
+        int size = r * 2 + 1;
+        double sigma = r / 2.0;
+        double twoSigmaSq = 2 * sigma * sigma;
+        double[][] kernel = new double[size][size];
+        double sum = 0;
+        for (int y = -r; y <= r; y++) {
+            for (int x = -r; x <= r; x++) {
+                double weight = Math.exp(-(x * x + y * y) / twoSigmaSq);
+                kernel[y + r][x + r] = weight;
+                sum += weight;
+            }
+        }
+        Color[][] next = new Color[rows][columns];
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < columns; col++) {
+                double accR = 0, accG = 0, accB = 0, weightSum = 0;
+                for (int ky = -r; ky <= r; ky++) {
+                    int rr = row + ky;
+                    if (rr < 0 || rr >= rows) continue;
+                    for (int kx = -r; kx <= r; kx++) {
+                        int cc = col + kx;
+                        if (cc < 0 || cc >= columns) continue;
+                        double w = kernel[ky + r][kx + r];
+                        Color c = pixels[rr][cc];
+                        if (c == null) c = PixelArtApp.CANVAS_BG;
+                        accR += c.getRed() * w;
+                        accG += c.getGreen() * w;
+                        accB += c.getBlue() * w;
+                        weightSum += w;
+                    }
+                }
+                if (weightSum > 0) {
+                    int nr = PixelArtApp.clamp((int) Math.round(accR / weightSum));
+                    int ng = PixelArtApp.clamp((int) Math.round(accG / weightSum));
+                    int nb = PixelArtApp.clamp((int) Math.round(accB / weightSum));
+                    next[row][col] = new Color(nr, ng, nb);
+                }
+            }
+        }
+        for (int row = 0; row < rows; row++) {
+            System.arraycopy(next[row], 0, pixels[row], 0, columns);
+        }
+        repaint();
+    }
+
     void flipHorizontal() {
         pushUndo();
         for (int r = 0; r < rows; r++) {
@@ -144,6 +193,90 @@ class PixelCanvas extends javax.swing.JPanel {
             }
         }
         repaint();
+    }
+
+    void ditherFloydSteinberg() {
+        pushUndo();
+        double[][] errR = new double[rows][columns];
+        double[][] errG = new double[rows][columns];
+        double[][] errB = new double[rows][columns];
+        for (int y = 0; y < rows; y++) {
+            for (int x = 0; x < columns; x++) {
+                Color src = pixels[y][x];
+                if (src == null) src = PixelArtApp.CANVAS_BG;
+                double r = clampDouble(src.getRed() + errR[y][x]);
+                double g = clampDouble(src.getGreen() + errG[y][x]);
+                double b = clampDouble(src.getBlue() + errB[y][x]);
+                int qr = quantizeChannel(r);
+                int qg = quantizeChannel(g);
+                int qb = quantizeChannel(b);
+                pixels[y][x] = new Color(qr, qg, qb);
+
+                double dr = r - qr;
+                double dg = g - qg;
+                double db = b - qb;
+                diffuse(errR, y, x, dr);
+                diffuse(errG, y, x, dg);
+                diffuse(errB, y, x, db);
+            }
+        }
+        repaint();
+    }
+
+    private void diffuse(double[][] grid, int y, int x, double error) {
+        // Floyd–Steinberg weights
+        if (x + 1 < columns) grid[y][x + 1] += error * 7 / 16.0;
+        if (y + 1 < rows) {
+            if (x > 0) grid[y + 1][x - 1] += error * 3 / 16.0;
+            grid[y + 1][x] += error * 5 / 16.0;
+            if (x + 1 < columns) grid[y + 1][x + 1] += error * 1 / 16.0;
+        }
+    }
+
+    private double clampDouble(double v) {
+        if (v < 0) return 0;
+        if (v > 255) return 255;
+        return v;
+    }
+
+    void ditherOrdered() {
+        pushUndo();
+        int[][] bayer4 = {
+                {0, 8, 2, 10},
+                {12, 4, 14, 6},
+                {3, 11, 1, 9},
+                {15, 7, 13, 5}
+        };
+        int step = 255 / (DITHER_LEVELS - 1);
+        for (int y = 0; y < rows; y++) {
+            for (int x = 0; x < columns; x++) {
+                Color src = pixels[y][x];
+                if (src == null) src = PixelArtApp.CANVAS_BG;
+                int threshold = bayer4[y & 3][x & 3]; // 0..15
+                double t = (threshold + 0.5) / 16.0;   // 0..1
+                pixels[y][x] = new Color(
+                        orderedChannel(src.getRed(), step, t),
+                        orderedChannel(src.getGreen(), step, t),
+                        orderedChannel(src.getBlue(), step, t)
+                );
+            }
+        }
+        repaint();
+    }
+
+    private int quantizeChannel(double value) {
+        double step = 255.0 / (DITHER_LEVELS - 1);
+        int idx = (int) Math.round(value / step);
+        idx = Math.max(0, Math.min(DITHER_LEVELS - 1, idx));
+        return (int) Math.round(idx * step);
+    }
+
+    private int orderedChannel(int value, int step, double threshold) {
+        int baseIdx = value / step;
+        int base = baseIdx * step;
+        int next = Math.min(255, base + step);
+        double frac = (value - base) / (double) step;
+        return frac > threshold ? next : base;
     }
 
     private void enablePainting() {
@@ -250,19 +383,32 @@ class PixelCanvas extends javax.swing.JPanel {
         }
         int stampRows = stamp.length;
         int stampCols = stamp[0].length;
-        int startCol = column - stampCols / 2;
-        int startRow = row - stampRows / 2;
-        int endCol = Math.min(columns - 1, startCol + stampCols - 1);
-        int endRow = Math.min(rows - 1, startRow + stampRows - 1);
+        int scale = computeStampScale(stampCols, stampRows);
+        int stampWidth = stampCols * scale;
+        int stampHeight = stampRows * scale;
+
+        int startCol = column - stampWidth / 2;
+        int startRow = row - stampHeight / 2;
+        int endCol = Math.min(columns - 1, startCol + stampWidth - 1);
+        int endRow = Math.min(rows - 1, startRow + stampHeight - 1);
 
         if (startCol < 0) startCol = 0;
         if (startRow < 0) startRow = 0;
 
-        for (int r = startRow; r <= endRow; r++) {
-            for (int c = startCol; c <= endCol; c++) {
-                Color s = stamp[r - startRow][c - startCol];
-                if (s != null) {
-                    pixels[r][c] = s;
+        for (int sr = 0; sr < stampRows; sr++) {
+            for (int sc = 0; sc < stampCols; sc++) {
+                Color s = stamp[sr][sc];
+                if (s == null) continue;
+                int destCol = startCol + sc * scale;
+                int destRow = startRow + sr * scale;
+                for (int r = 0; r < scale; r++) {
+                    int rr = destRow + r;
+                    if (rr > endRow) break;
+                    for (int c = 0; c < scale; c++) {
+                        int cc = destCol + c;
+                        if (cc > endCol) break;
+                        pixels[rr][cc] = s;
+                    }
                 }
             }
         }
@@ -343,19 +489,31 @@ class PixelCanvas extends javax.swing.JPanel {
                 if (stamp != null) {
                     int stampRows = stamp.length;
                     int stampCols = stamp[0].length;
-                    int startCol = hoverCol - stampCols / 2;
-                    int startRow = hoverRow - stampRows / 2;
-                    int endCol = Math.min(columns - 1, startCol + stampCols - 1);
-                    int endRow = Math.min(rows - 1, startRow + stampRows - 1);
+                    int scale = computeStampScale(stampCols, stampRows);
+                    int stampWidth = stampCols * scale;
+                    int stampHeight = stampRows * scale;
+                    int startCol = hoverCol - stampWidth / 2;
+                    int startRow = hoverRow - stampHeight / 2;
+                    int endCol = Math.min(columns - 1, startCol + stampWidth - 1);
+                    int endRow = Math.min(rows - 1, startRow + stampHeight - 1);
                     if (startCol < 0) startCol = 0;
                     if (startRow < 0) startRow = 0;
 
-                    for (int r = startRow; r <= endRow; r++) {
-                        for (int c = startCol; c <= endCol; c++) {
-                            Color s = stamp[r - startRow][c - startCol];
-                            if (s != null) {
-                                g2.setColor(new Color(s.getRed(), s.getGreen(), s.getBlue(), 120));
-                                g2.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                    for (int sr = 0; sr < stampRows; sr++) {
+                        for (int sc = 0; sc < stampCols; sc++) {
+                            Color s = stamp[sr][sc];
+                            if (s == null) continue;
+                            int destCol = startCol + sc * scale;
+                            int destRow = startRow + sr * scale;
+                            for (int r = 0; r < scale; r++) {
+                                int rr = destRow + r;
+                                if (rr > endRow) break;
+                                for (int c = 0; c < scale; c++) {
+                                    int cc = destCol + c;
+                                    if (cc > endCol) break;
+                                    g2.setColor(new Color(s.getRed(), s.getGreen(), s.getBlue(), 120));
+                                    g2.fillRect(cc * cellSize, rr * cellSize, cellSize, cellSize);
+                                }
                             }
                         }
                     }
@@ -410,6 +568,14 @@ class PixelCanvas extends javax.swing.JPanel {
         return copy;
     }
 
+    void setPixelDirect(int row, int col, Color color) {
+        if (row < 0 || row >= rows || col < 0 || col >= columns) return;
+        pixels[row][col] = color;
+    }
+
+    int getRows() { return rows; }
+    int getColumns() { return columns; }
+
     void undo() {
         if (undoStack.isEmpty()) {
             return;
@@ -434,5 +600,11 @@ class PixelCanvas extends javax.swing.JPanel {
 
     private boolean isStampMode() {
         return modeSupplier != null && modeSupplier.get() == PixelArtApp.ToolMode.STAMP;
+    }
+
+    private int computeStampScale(int stampCols, int stampRows) {
+        int base = Math.max(stampCols, stampRows);
+        int scale = (int) Math.round((double) brushSize / (double) base);
+        return Math.max(1, scale);
     }
 }
