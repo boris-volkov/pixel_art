@@ -8,8 +8,6 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
-import javax.swing.UnsupportedLookAndFeelException;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -66,7 +64,6 @@ public class PixelArtApp {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            tryInstallNimbus();
             new PixelArtApp().start();
         });
     }
@@ -139,19 +136,6 @@ public class PixelArtApp {
 
         java.awt.Cursor cursor = createCursor();
         frame.setCursor(cursor);
-    }
-
-    private static void tryInstallNimbus() {
-        for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
-            if ("Nimbus".equals(info.getName())) {
-                try {
-                    UIManager.setLookAndFeel(info.getClassName());
-                } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException ignored) {
-                    // keep default
-                }
-                break;
-            }
-        }
     }
 
     private void enterFullScreen(JFrame frame) {
@@ -336,6 +320,21 @@ public class PixelArtApp {
                     console.setStatus("Save failed: " + ex.getMessage());
                 }
                 break;
+            case "load":
+                if (parts.length < 2) {
+                    console.setStatus("Usage: load <file.png>");
+                    return;
+                }
+                try {
+                    loadImage(parts[1]);
+                    console.setStatus("Loaded " + parts[1]);
+                } catch (IOException ex) {
+                    console.setStatus("Load failed: " + ex.getMessage());
+                }
+                break;
+            case "resolution":
+                console.setStatus("Resolution: " + gridSize + "x" + gridSize);
+                break;
             case "new":
                 if (parts.length < 2) {
                     console.setStatus("Usage: new <size>");
@@ -381,7 +380,7 @@ public class PixelArtApp {
                 }
                 break;
             case "help":
-                console.setStatus("Commands: save <file.png> | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | exit");
+                console.setStatus("Commands: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | exit");
                 break;
             case "blur":
                 if (parts.length < 3 || !"gaussian".equalsIgnoreCase(parts[1])) {
@@ -420,7 +419,7 @@ public class PixelArtApp {
             case "exit":
                 System.exit(0);
             default:
-                console.setStatus("Unknown. Try: save <file.png> | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | exit");
+                console.setStatus("Unknown. Try: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | exit");
         }
     }
 
@@ -435,6 +434,39 @@ public class PixelArtApp {
         ImageIO.write(img, format, file);
     }
 
+    private void loadImage(String path) throws IOException {
+        BufferedImage img = ImageIO.read(new File(path));
+        if (img == null) throw new IOException("Unsupported image");
+        int w = img.getWidth();
+        int h = img.getHeight();
+        if (w != h) {
+            throw new IOException("Image must be square");
+        }
+        gridSize = w;
+        canvasCellSize = Math.min(canvasCellSize, computeMaxCellSizeForScreen());
+        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int argb = img.getRGB(x, y);
+                Color c = new Color(argb, true);
+                newCanvas.setPixelDirect(y, x, c);
+            }
+        }
+        newCanvas.setCurrentColor(currentBrushColor());
+        newCanvas.setBrushSize(brushSize);
+        this.canvas = newCanvas;
+
+        canvasHolder.removeAll();
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.anchor = GridBagConstraints.CENTER;
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        gbc.fill = GridBagConstraints.NONE;
+        canvasHolder.add(newCanvas, gbc);
+        canvasHolder.revalidate();
+        canvasHolder.repaint();
+        if (controlBar != null) controlBar.syncSliders();
+    }
     static Color adjustChannel(Color color, int redDelta, int greenDelta, int blueDelta) {
         int r = clamp(color.getRed() + redDelta);
         int g = clamp(color.getGreen() + greenDelta);
