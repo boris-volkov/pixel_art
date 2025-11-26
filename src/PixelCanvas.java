@@ -51,6 +51,7 @@ class PixelCanvas extends javax.swing.JPanel {
         this.panBlocker = panBlocker;
         setPreferredSize(new Dimension(columns * cellSize, rows * cellSize));
         setBackground(PixelArtApp.CANVAS_BG);
+        setFocusable(true);
         enablePainting();
     }
 
@@ -289,6 +290,7 @@ class PixelCanvas extends javax.swing.JPanel {
                 if (panBlocker != null && panBlocker.getAsBoolean()) {
                     return;
                 }
+                requestFocusInWindow();
                 constrainStroke = e.isShiftDown();
                 anchorCol = e.getX() / cellSize;
                 anchorRow = e.getY() / cellSize;
@@ -362,9 +364,18 @@ class PixelCanvas extends javax.swing.JPanel {
 
     private void applyBrush(int column, int row) {
         PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
-        if (mode == PixelArtApp.ToolMode.STAMP && stampSupplier != null) {
-            applyStamp(column, row);
-            return;
+        switch (mode) {
+            case STAMP:
+                if (stampSupplier != null) applyStamp(column, row);
+                return;
+            case FILL:
+                floodFill(column, row);
+                return;
+            case BLUR:
+                blurAt(column, row);
+                return;
+            default:
+                break;
         }
 
         int half = brushSize / 2;
@@ -479,6 +490,81 @@ class PixelCanvas extends javax.swing.JPanel {
         constrainStroke = false;
         anchorCol = -1;
         anchorRow = -1;
+    }
+
+    private void floodFill(int column, int row) {
+        if (column < 0 || column >= columns || row < 0 || row >= rows) return;
+        Color target = pixels[row][column];
+        Color replacement = currentColor;
+        if (sameColor(target, replacement)) return;
+        boolean[][] visited = new boolean[rows][columns];
+        ArrayDeque<int[]> q = new ArrayDeque<>();
+        q.add(new int[]{row, column});
+        visited[row][column] = true;
+        while (!q.isEmpty()) {
+            int[] pos = q.removeFirst();
+            int r = pos[0];
+            int c = pos[1];
+            pixels[r][c] = replacement;
+            if (c > 0 && !visited[r][c - 1] && sameColor(target, pixels[r][c - 1])) { visited[r][c - 1] = true; q.add(new int[]{r, c - 1}); }
+            if (c < columns - 1 && !visited[r][c + 1] && sameColor(target, pixels[r][c + 1])) { visited[r][c + 1] = true; q.add(new int[]{r, c + 1}); }
+            if (r > 0 && !visited[r - 1][c] && sameColor(target, pixels[r - 1][c])) { visited[r - 1][c] = true; q.add(new int[]{r - 1, c}); }
+            if (r < rows - 1 && !visited[r + 1][c] && sameColor(target, pixels[r + 1][c])) { visited[r + 1][c] = true; q.add(new int[]{r + 1, c}); }
+        }
+        repaint();
+    }
+
+    private boolean sameColor(Color a, Color b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.equals(b);
+    }
+
+    private void blurAt(int column, int row) {
+        int radius = Math.max(1, brushSize / 2);
+        int startCol = Math.max(0, column - radius);
+        int endCol = Math.min(columns - 1, column + radius);
+        int startRow = Math.max(0, row - radius);
+        int endRow = Math.min(rows - 1, row + radius);
+        pushUndo();
+        double sigma = Math.max(1.0, radius / 1.5);
+        double twoSigmaSq = 2 * sigma * sigma;
+        Color[][] snapshot = new Color[rows][columns];
+        for (int r = 0; r < rows; r++) {
+            snapshot[r] = Arrays.copyOf(pixels[r], columns);
+        }
+        for (int r = startRow; r <= endRow; r++) {
+            for (int c = startCol; c <= endCol; c++) {
+                double accR = 0, accG = 0, accB = 0, wSum = 0;
+                for (int dy = -radius; dy <= radius; dy++) {
+                    int rr = r + dy;
+                    if (rr < 0 || rr >= rows) continue;
+                    for (int dx = -radius; dx <= radius; dx++) {
+                        int cc = c + dx;
+                        if (cc < 0 || cc >= columns) continue;
+                        if (dx * dx + dy * dy > radius * radius) continue; // keep inside brush footprint
+                        double w = Math.exp(-(dx * dx + dy * dy) / twoSigmaSq);
+                        Color src = snapshot[rr][cc];
+                        if (src == null) src = PixelArtApp.CANVAS_BG;
+                        accR += src.getRed() * w;
+                        accG += src.getGreen() * w;
+                        accB += src.getBlue() * w;
+                        wSum += w;
+                    }
+                }
+                if (wSum > 0) {
+                    int nr = PixelArtApp.clamp((int) Math.round(accR / wSum));
+                    int ng = PixelArtApp.clamp((int) Math.round(accG / wSum));
+                    int nb = PixelArtApp.clamp((int) Math.round(accB / wSum));
+                    pixels[r][c] = new Color(nr, ng, nb);
+                }
+            }
+        }
+        int x = startCol * cellSize;
+        int y = startRow * cellSize;
+        int w = (endCol - startCol + 1) * cellSize;
+        int h = (endRow - startRow + 1) * cellSize;
+        repaint(new Rectangle(x, y, w, h));
     }
 
     @Override

@@ -12,8 +12,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Graphics2D;
@@ -26,7 +24,7 @@ import java.io.File;
 import java.io.IOException;
 
 public class PixelArtApp {
-    enum ToolMode {BRUSH, STAMP}
+    enum ToolMode {BRUSH, STAMP, FILL, BLUR}
 
     static final Color BG = new Color(96, 96, 96);
     static final Color TEXT = new Color(226, 231, 240);
@@ -50,7 +48,7 @@ public class PixelArtApp {
 
     private PixelCanvas canvas;
     private PixelCanvas stampCanvas;
-    private JPanel canvasHolder;
+    private CanvasViewport canvasHolder;
     private ControlBar controlBar;
     private TopBar topBar;
     private ConsolePanel console;
@@ -81,14 +79,8 @@ public class PixelArtApp {
         stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> ToolMode.BRUSH, null, null);
         stampCanvas.setCurrentColor(currentBrushColor());
 
-        canvasHolder = new JPanel(new GridBagLayout());
+        canvasHolder = new CanvasViewport(canvas);
         canvasHolder.setBackground(BG);
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.anchor = GridBagConstraints.CENTER;
-        gbc.weightx = 1.0;
-        gbc.weighty = 1.0;
-        gbc.fill = GridBagConstraints.NONE;
-        canvasHolder.add(canvas, gbc);
 
         controlBar = new ControlBar(this);
         console = new ConsolePanel(this::handleCommand);
@@ -102,20 +94,20 @@ public class PixelArtApp {
         topRow.setOpaque(false);
         topRow.setLayout(new BoxLayout(topRow, BoxLayout.X_AXIS));
         topRow.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        JPanel stampHolder = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-        stampHolder.setOpaque(false);
-        stampCanvas.setBorder(BorderFactory.createLineBorder(BUTTON_BORDER));
-        stampHolder.add(stampCanvas);
-        topRow.add(topBar);
+        StampPanel stampHolder = new StampPanel(stampCanvas);
+        FocusWrap topWrapLeft = new FocusWrap(topBar);
+        FocusWrap topWrapRight = new FocusWrap(stampHolder);
+        topRow.add(topWrapLeft);
         topRow.add(Box.createRigidArea(new Dimension(6, 1)));
-        topRow.add(stampHolder);
+        topRow.add(topWrapRight);
         JPanel topWrap = new JPanel();
         topWrap.setOpaque(false);
         topWrap.setLayout(new BoxLayout(topWrap, BoxLayout.Y_AXIS));
         topWrap.add(topRow);
         topWrap.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         east.add(topWrap, BorderLayout.NORTH);
-        east.add(controlBar, BorderLayout.CENTER);
+        FocusWrap controlWrap = new FocusWrap(controlBar);
+        east.add(controlWrap, BorderLayout.CENTER);
 
         frame.add(canvasHolder, BorderLayout.CENTER);
         frame.add(east, BorderLayout.EAST);
@@ -130,6 +122,8 @@ public class PixelArtApp {
                 controlBar.syncSliders();
             }
         });
+        installConsoleToggle(frame);
+        installPanKeys(frame);
 
         frame.pack();
         enterFullScreen(frame);
@@ -213,23 +207,15 @@ public class PixelArtApp {
         return stampCanvas != null ? stampCanvas.getPixelsCopy() : null;
     }
 
-    void rebuildCanvas(int newGridSize) {
-        gridSize = newGridSize;
-        canvasCellSize = Math.min(canvasCellSize, computeMaxCellSizeForScreen());
-        PixelCanvas newCanvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
+    void rebuildCanvas(int newCols, int newRows) {
+        gridSize = Math.max(newCols, newRows);
+        canvasCellSize = computeMaxCellSizeForScreen();
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
-
-        canvasHolder.removeAll();
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.anchor = GridBagConstraints.CENTER;
-        gbc.weightx = 1.0;
-        gbc.weighty = 1.0;
-        gbc.fill = GridBagConstraints.NONE;
-        canvasHolder.add(newCanvas, gbc);
-        canvasHolder.revalidate();
-        canvasHolder.repaint();
+        canvasHolder.setCanvas(newCanvas);
+        canvasHolder.recenter();
     }
 
     void adjustBrushBrightnessGlobal(int delta) {
@@ -241,12 +227,11 @@ public class PixelArtApp {
     }
 
     void setCanvasCellSize(int size) {
-        int cap = computeMaxCellSizeForScreen();
+        int cap = MAX_CELL_SIZE;
         canvasCellSize = Math.max(2, Math.min(cap, size));
         if (canvas != null) {
             canvas.setCellSize(canvasCellSize);
-            canvasHolder.revalidate();
-            canvasHolder.repaint();
+            canvasHolder.refreshLayout();
         }
         if (controlBar != null) controlBar.syncSliders();
     }
@@ -262,7 +247,7 @@ public class PixelArtApp {
         int newRows = oldRows * factor;
         int newCols = oldCols * factor;
         gridSize = newRows;
-        canvasCellSize = Math.min(canvasCellSize, computeMaxCellSizeForScreen());
+        canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
         PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
         for (int r = 0; r < newRows; r++) {
             int srcR = Math.min(oldRows - 1, r / factor);
@@ -276,15 +261,7 @@ public class PixelArtApp {
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
 
-        canvasHolder.removeAll();
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.anchor = GridBagConstraints.CENTER;
-        gbc.weightx = 1.0;
-        gbc.weighty = 1.0;
-        gbc.fill = GridBagConstraints.NONE;
-        canvasHolder.add(newCanvas, gbc);
-        canvasHolder.revalidate();
-        canvasHolder.repaint();
+        canvasHolder.setCanvas(newCanvas);
         if (controlBar != null) controlBar.syncSliders();
     }
 
@@ -337,16 +314,24 @@ public class PixelArtApp {
                 break;
             case "new":
                 if (parts.length < 2) {
-                    console.setStatus("Usage: new <size>");
+                    console.setStatus("Usage: new <size> or new <width> <height>");
                     return;
                 }
                 try {
-                    int size = Integer.parseInt(parts[1]);
-                    if (size <= 0) throw new NumberFormatException();
-                    rebuildCanvas(size);
-                    console.setStatus("Created new " + size + "x" + size + " canvas");
+                    if (parts.length == 2) {
+                        int size = Integer.parseInt(parts[1]);
+                        if (size <= 0) throw new NumberFormatException();
+                        rebuildCanvas(size, size);
+                        console.setStatus("Created new " + size + "x" + size + " canvas");
+                    } else {
+                        int w = Integer.parseInt(parts[1]);
+                        int h = Integer.parseInt(parts[2]);
+                        if (w <= 0 || h <= 0) throw new NumberFormatException();
+                        rebuildCanvas(w, h);
+                        console.setStatus("Created new " + w + "x" + h + " canvas");
+                    }
                 } catch (NumberFormatException ex) {
-                    console.setStatus("Size must be a positive number");
+                    console.setStatus("Size must be positive numbers");
                 }
                 break;
             case "flip":
@@ -443,7 +428,7 @@ public class PixelArtApp {
             throw new IOException("Image must be square");
         }
         gridSize = w;
-        canvasCellSize = Math.min(canvasCellSize, computeMaxCellSizeForScreen());
+        canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
         PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
@@ -456,15 +441,7 @@ public class PixelArtApp {
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
 
-        canvasHolder.removeAll();
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.anchor = GridBagConstraints.CENTER;
-        gbc.weightx = 1.0;
-        gbc.weighty = 1.0;
-        gbc.fill = GridBagConstraints.NONE;
-        canvasHolder.add(newCanvas, gbc);
-        canvasHolder.revalidate();
-        canvasHolder.repaint();
+        canvasHolder.setCanvas(newCanvas);
         if (controlBar != null) controlBar.syncSliders();
     }
     static Color adjustChannel(Color color, int redDelta, int greenDelta, int blueDelta) {
@@ -491,9 +468,61 @@ public class PixelArtApp {
     void setRed(int v) { red = clamp(v); updateBrushTargets(); }
     void setGreen(int v) { green = clamp(v); updateBrushTargets(); }
     void setBlue(int v) { blue = clamp(v); updateBrushTargets(); }
+    int getSaturationPercent() {
+        float[] hsb = Color.RGBtoHSB(red, green, blue, null);
+        return Math.round(hsb[1] * 100f);
+    }
+    int getBrightnessPercent() {
+        float[] hsb = Color.RGBtoHSB(red, green, blue, null);
+        return Math.round(hsb[2] * 100f);
+    }
+    void setSaturationPercent(int percent) {
+        float[] hsb = Color.RGBtoHSB(red, green, blue, null);
+        float s = Math.max(0f, Math.min(1f, percent / 100f));
+        Color c = Color.getHSBColor(hsb[0], s, hsb[2]);
+        setBrushColor(c);
+    }
+    void setBrightnessPercent(int percent) {
+        float[] hsb = Color.RGBtoHSB(red, green, blue, null);
+        float bVal = Math.max(0f, Math.min(1f, percent / 100f));
+        Color c = Color.getHSBColor(hsb[0], hsb[1], bVal);
+        setBrushColor(c);
+    }
     int getBrushSize() { return brushSize; }
     void setBrushSize(int size) { onBrushSizeChanged(size); if (canvas != null) canvas.setBrushSize(size); }
     ToolMode getToolMode() { return toolMode; }
-    void toggleToolMode() { toolMode = (toolMode == ToolMode.BRUSH) ? ToolMode.STAMP : ToolMode.BRUSH; }
+    void setToolMode(ToolMode mode) { toolMode = mode; }
     PixelCanvas getCanvas() { return canvas; }
+
+    private void installPanKeys(JFrame frame) {
+        int step = 20;
+        JComponent root = frame.getRootPane();
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("LEFT"), "panLeft");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("RIGHT"), "panRight");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("UP"), "panUp");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("DOWN"), "panDown");
+        root.getActionMap().put("panLeft", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { canvasHolder.pan(-step, 0); } });
+        root.getActionMap().put("panRight", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { canvasHolder.pan(step, 0); } });
+        root.getActionMap().put("panUp", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { canvasHolder.pan(0, -step); } });
+        root.getActionMap().put("panDown", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { canvasHolder.pan(0, step); } });
+    }
+
+    private void installConsoleToggle(JFrame frame) {
+        JComponent root = frame.getRootPane();
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ESCAPE"), "toggleConsole");
+        root.getActionMap().put("toggleConsole", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console.isFocusOwner()) {
+                    if (canvasHolder != null) {
+                        canvasHolder.requestFocusInWindow();
+                    } else {
+                        frame.requestFocusInWindow();
+                    }
+                } else {
+                    console.requestFocusInWindow();
+                }
+            }
+        });
+    }
 }

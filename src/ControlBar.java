@@ -15,12 +15,14 @@ class ControlBar extends JComponent {
     private final SliderControl redSlider;
     private final SliderControl greenSlider;
     private final SliderControl blueSlider;
+    private final SliderControl satSlider;
+    private final SliderControl valSlider;
     private final SliderControl brushSlider;
     private final SliderControl zoomSlider;
-    private final ActionButton modeButton;
-    private final ActionButton stampClearButton;
-    private final ActionButton brightMinus;
-    private final ActionButton brightPlus;
+    private final ActionButton toolBrush;
+    private final ActionButton toolStamp;
+    private final ActionButton toolFill;
+    private final ActionButton toolBlur;
     private final List<ActionButton> buttons;
     private SliderControl activeSlider;
     private ActionButton activeButton;
@@ -40,29 +42,39 @@ class ControlBar extends JComponent {
             app.setBlue(v);
             repaint();
         });
+        satSlider = new SliderControl("Sat", 0, 100, app.getSaturationPercent(), v -> {
+            app.setSaturationPercent(v);
+            repaint();
+        });
+        valSlider = new SliderControl("Brt", 0, 100, app.getBrightnessPercent(), v -> {
+            app.setBrightnessPercent(v);
+            repaint();
+        });
         brushSlider = new SliderControl("Brush", 1, 64, app.getBrushSize(), v -> {
             app.setBrushSize(v);
             repaint();
         });
-        int zoomCap = app.computeMaxCellSizeForScreen();
+        int zoomCap = PixelArtApp.MAX_CELL_SIZE;
         zoomSlider = new SliderControl("Zoom", 2, Math.max(zoomCap, 2), app.getCanvasCellSize(), v -> {
             app.setCanvasCellSize(v);
             repaint();
         });
-        final ActionButton[] modeRef = new ActionButton[1];
-        modeButton = new ActionButton("BRUSH", () -> {
-            app.toggleToolMode();
-            modeRef[0].label = (app.getToolMode() == PixelArtApp.ToolMode.BRUSH) ? "BRUSH" : "STAMP";
+        toolBrush = new ActionButton("BR", () -> {
+            app.setToolMode(PixelArtApp.ToolMode.BRUSH);
             repaint();
         }, true);
-        modeRef[0] = modeButton;
-        stampClearButton = new ActionButton("S-CLR", () -> {
-            if (app.getStampCanvas() != null) {
-                app.getStampCanvas().clear();
-            }
+        toolStamp = new ActionButton("ST", () -> {
+            app.setToolMode(PixelArtApp.ToolMode.STAMP);
+            repaint();
         }, true);
-        brightMinus = new ActionButton("B-", () -> app.adjustBrushBrightnessGlobal(-PixelArtApp.BRIGHT_STEP), false);
-        brightPlus = new ActionButton("B+", () -> app.adjustBrushBrightnessGlobal(PixelArtApp.BRIGHT_STEP), false);
+        toolFill = new ActionButton("FI", () -> {
+            app.setToolMode(PixelArtApp.ToolMode.FILL);
+            repaint();
+        }, true);
+        toolBlur = new ActionButton("BL", () -> {
+            app.setToolMode(PixelArtApp.ToolMode.BLUR);
+            repaint();
+        }, true);
         buttons = List.of(
                 new ActionButton("Fill", () -> app.getCanvas().fill(app.currentBrushColor()), true),
                 new ActionButton("Clear", () -> app.getCanvas().clear(), true),
@@ -118,6 +130,8 @@ class ControlBar extends JComponent {
         redSlider.value = app.getRed();
         greenSlider.value = app.getGreen();
         blueSlider.value = app.getBlue();
+        satSlider.value = app.getSaturationPercent();
+        valSlider.value = app.getBrightnessPercent();
         brushSlider.value = app.getBrushSize();
         zoomSlider.value = app.getCanvasCellSize();
         repaint();
@@ -135,39 +149,23 @@ class ControlBar extends JComponent {
         int y = padding;
         int availableWidth = getWidth() - padding * 2;
 
-        // Top row: mode and stamp clear
-        int btnHeightTop = 28;
+        // Tool row
+        int btnHeightTop = 26;
         int gapTop = 6;
-        int halfWidth = (availableWidth - gapTop) / 2;
-        modeButton.bounds = new Rectangle(padding, y, halfWidth, btnHeightTop);
-        stampClearButton.bounds = new Rectangle(padding + halfWidth + gapTop, y, halfWidth, btnHeightTop);
-        paintButton(g2, modeButton);
-        paintButton(g2, stampClearButton);
+        ActionButton[] tools = {toolBrush, toolStamp, toolFill, toolBlur};
+        int toolWidth = (availableWidth - gapTop * (tools.length - 1)) / tools.length;
+        for (int i = 0; i < tools.length; i++) {
+            int x = padding + i * (toolWidth + gapTop);
+            tools[i].bounds = new Rectangle(x, y, toolWidth, btnHeightTop);
+            paintButton(g2, tools[i]);
+        }
         y += btnHeightTop + 10;
-
-        // Brightness row (aligned with sliders, no track)
-        int labelWidth = 90;
-        int btnW = 24;
-        int btnH = 22;
-        int gap = 4;
-        int trackWidth = availableWidth - labelWidth - (btnW * 2) - (gap * 3);
-        trackWidth = Math.max(30, trackWidth);
-        int trackX = padding + labelWidth + btnW + gap;
-        int rowY = y + 12;
-
-        g2.setColor(PixelArtApp.TEXT);
-        g2.drawString("Bright", padding, rowY + 8);
-
-        brightMinus.bounds = new Rectangle(trackX - btnW - gap, rowY - 6, btnW, btnH);
-        brightPlus.bounds = new Rectangle(trackX + trackWidth + gap, rowY - 6, btnW, btnH);
-        paintButton(g2, brightMinus);
-        paintButton(g2, brightPlus);
-
-        y += btnH + 14;
 
         y = drawSlider(g2, redSlider, padding, y, availableWidth);
         y = drawSlider(g2, greenSlider, padding, y, availableWidth);
         y = drawSlider(g2, blueSlider, padding, y, availableWidth);
+        y = drawSlider(g2, satSlider, padding, y, availableWidth);
+        y = drawSlider(g2, valSlider, padding, y, availableWidth);
         y = drawSlider(g2, brushSlider, padding, y, availableWidth);
         y = drawSlider(g2, zoomSlider, padding, y, availableWidth);
 
@@ -262,7 +260,7 @@ class ControlBar extends JComponent {
     }
 
     private void paintButton(Graphics2D g2, ActionButton button) {
-        Color themed = themedButtonColor(button.label, button.accent);
+        Color themed = themedButtonColor(button, button.label, button.accent);
         Color fill = themed;
         if (button.pressed) {
             fill = PixelArtApp.BUTTON_ACTIVE;
@@ -285,7 +283,7 @@ class ControlBar extends JComponent {
     }
 
     private SliderControl findSlider(int x, int y) {
-        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, brushSlider, zoomSlider)) {
+        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider, zoomSlider)) {
             if (s.track != null && s.track.contains(x, y)) {
                 return s;
             }
@@ -312,19 +310,12 @@ class ControlBar extends JComponent {
     }
 
     private ActionButton findButtonAt(int x, int y) {
-        if (modeButton.bounds != null && modeButton.bounds.contains(x, y)) {
-            return modeButton;
+        for (ActionButton tb : List.of(toolBrush, toolStamp, toolFill, toolBlur)) {
+            if (tb.bounds != null && tb.bounds.contains(x, y)) {
+                return tb;
+            }
         }
-        if (stampClearButton.bounds != null && stampClearButton.bounds.contains(x, y)) {
-            return stampClearButton;
-        }
-        if (brightMinus.bounds != null && brightMinus.bounds.contains(x, y)) {
-            return brightMinus;
-        }
-        if (brightPlus.bounds != null && brightPlus.bounds.contains(x, y)) {
-            return brightPlus;
-        }
-        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, brushSlider, zoomSlider)) {
+        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider, zoomSlider)) {
             for (ActionButton b : List.of(s.minus, s.plus)) {
                 if (b.bounds != null && b.bounds.contains(x, y)) {
                     return b;
@@ -356,7 +347,10 @@ class ControlBar extends JComponent {
         repeatTimer.stop();
     }
 
-    private Color themedButtonColor(String label, boolean accent) {
+    private Color themedButtonColor(ActionButton button, String label, boolean accent) {
+        if (isActiveTool(button)) {
+            return PixelArtApp.ACCENT;
+        }
         if (label.startsWith("C")) {
             if (label.contains("-")) return new Color(220, 90, 80);
             return PixelArtApp.CYAN_BTN;
@@ -370,5 +364,14 @@ class ControlBar extends JComponent {
             return PixelArtApp.YELLOW_BTN;
         }
         return accent ? PixelArtApp.ACCENT.darker() : PixelArtApp.BUTTON_BG;
+    }
+
+    private boolean isActiveTool(ActionButton button) {
+        PixelArtApp.ToolMode mode = app.getToolMode();
+        if (button == toolBrush) return mode == PixelArtApp.ToolMode.BRUSH;
+        if (button == toolStamp) return mode == PixelArtApp.ToolMode.STAMP;
+        if (button == toolFill) return mode == PixelArtApp.ToolMode.FILL;
+        if (button == toolBlur) return mode == PixelArtApp.ToolMode.BLUR;
+        return false;
     }
 }
