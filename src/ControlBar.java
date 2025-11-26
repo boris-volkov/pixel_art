@@ -79,12 +79,12 @@ class ControlBar extends JComponent {
         setOpaque(true);
         setBackground(PixelArtApp.BG);
         setPreferredSize(new Dimension(PixelArtApp.CONTROL_BAR_WIDTH, 0));
-        repeatTimer = new Timer(120, e -> {
+        repeatTimer = new Timer(70, e -> {
             if (activeButton != null) {
                 activeButton.action.run();
             }
         });
-        repeatTimer.setInitialDelay(350);
+        repeatTimer.setInitialDelay(180);
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {

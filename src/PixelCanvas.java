@@ -33,6 +33,9 @@ class PixelCanvas extends javax.swing.JPanel {
     private int hoverCol = -1;
     private int hoverRow = -1;
     private boolean strokeActive = false;
+    private boolean constrainStroke = false;
+    private int anchorCol = -1;
+    private int anchorRow = -1;
 
     PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback,
                 IntConsumer brushChangeCallback, Supplier<PixelArtApp.ToolMode> modeSupplier,
@@ -286,6 +289,9 @@ class PixelCanvas extends javax.swing.JPanel {
                 if (panBlocker != null && panBlocker.getAsBoolean()) {
                     return;
                 }
+                constrainStroke = e.isShiftDown();
+                anchorCol = e.getX() / cellSize;
+                anchorRow = e.getY() / cellSize;
                 if (e.isAltDown()) {
                     pickColor(e.getX(), e.getY());
                 } else {
@@ -334,6 +340,15 @@ class PixelCanvas extends javax.swing.JPanel {
     private void paintAt(int x, int y) {
         int column = x / cellSize;
         int row = y / cellSize;
+        if (constrainStroke && anchorCol >= 0 && anchorRow >= 0) {
+            int dx = column - anchorCol;
+            int dy = row - anchorRow;
+            if (Math.abs(dx) >= Math.abs(dy)) {
+                row = anchorRow;
+            } else {
+                column = anchorCol;
+            }
+        }
         if (column < 0 || column >= columns || row < 0 || row >= rows) {
             return;
         }
@@ -342,7 +357,7 @@ class PixelCanvas extends javax.swing.JPanel {
             strokeActive = true;
         }
         applyBrush(column, row);
-        updateHover(x, y);
+        updateHover(column * cellSize, row * cellSize);
     }
 
     private void applyBrush(int column, int row) {
@@ -461,6 +476,9 @@ class PixelCanvas extends javax.swing.JPanel {
 
     private void endStroke() {
         strokeActive = false;
+        constrainStroke = false;
+        anchorCol = -1;
+        anchorRow = -1;
     }
 
     @Override
