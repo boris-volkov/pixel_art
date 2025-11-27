@@ -321,6 +321,18 @@ public class PixelArtApp {
                     console.setStatus("Save failed: " + ex.getMessage());
                 }
                 break;
+            case "save-sequence":
+                if (parts.length < 2) {
+                    console.setStatus("Usage: save-sequence <base.png>");
+                    return;
+                }
+                try {
+                    saveSequence(parts[1]);
+                    console.setStatus("Saved sequence for " + parts[1]);
+                } catch (IOException ex) {
+                    console.setStatus("Save-seq failed: " + ex.getMessage());
+                }
+                break;
             case "load":
                 if (parts.length < 2) {
                     console.setStatus("Usage: load <file.png>");
@@ -389,7 +401,7 @@ public class PixelArtApp {
                 }
                 break;
             case "help":
-                console.setStatus("Commands: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd | dither ordered | resample <factor> | calc | animate | exit");
+                console.setStatus("Commands: save <file.png> | save-sequence <base.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd | dither ordered | resample <factor> | calc | animate | exit");
                 break;
             case "blur":
                 if (parts.length < 3) {
@@ -519,6 +531,68 @@ public class PixelArtApp {
             format = path.substring(dot + 1);
         }
         ImageIO.write(img, format, file);
+    }
+
+    private BufferedImage toImage(Color[][][] layerData) {
+        int rows = layerData[0].length;
+        int cols = layerData[0][0].length;
+        BufferedImage img = new BufferedImage(cols, rows, BufferedImage.TYPE_INT_ARGB);
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                Color color = PixelArtApp.CANVAS_BG;
+                for (int l = layerData.length - 1; l >= 0; l--) {
+                    Color cc = layerData[l][r][c];
+                    if (cc != null) { color = cc; break; }
+                }
+                img.setRGB(c, r, color.getRGB());
+            }
+        }
+        return img;
+    }
+
+    private void saveSequence(String basePath) throws IOException {
+        if (frames.isEmpty()) {
+            console.setStatus("No frames to save");
+            return;
+        }
+        String format = "png";
+        int dot = basePath.lastIndexOf('.');
+        String prefix = basePath;
+        if (dot > 0 && dot < basePath.length() - 1) {
+            format = basePath.substring(dot + 1);
+            prefix = basePath.substring(0, dot);
+        }
+        File baseFile = new File(prefix);
+        File parentDir = baseFile.getParentFile();
+        if (parentDir == null) parentDir = new File(".");
+        String dirName = baseFile.getName();
+        File outDir = new File(parentDir, dirName);
+        if (!outDir.exists() && !outDir.mkdirs()) {
+            throw new IOException("Could not create directory " + outDir.getAbsolutePath());
+        }
+        saveCurrentFrame();
+        int digits = Math.max(3, String.valueOf(frames.size()).length());
+        for (int i = 0; i < frames.size(); i++) {
+            FrameData fd = frames.get(i);
+            Color[][][] apply = fd.layers;
+            // compose animated layers over current static layers
+            Color[][][] snapshot = canvas.getLayersCopy();
+            for (int l = 0; l < apply.length; l++) {
+                if (apply[l] != null) {
+                    snapshot[l] = apply[l];
+                }
+            }
+            BufferedImage img = toImage(snapshot);
+            String idx = String.format("%0" + digits + "d", i + 1);
+            String outName = new File(outDir, prefixFileName(dirName, idx, format)).getPath();
+            ImageIO.write(img, format, new File(outName));
+        }
+        // re-apply current frame to restore canvas state
+        applyFrame(frames.get(currentFrameIndex));
+    }
+
+    private String prefixFileName(String base, String idx, String format) {
+        return base + idx + "." + format;
     }
 
     private void loadImage(String path) throws IOException {
