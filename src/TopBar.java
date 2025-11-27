@@ -9,7 +9,7 @@ import java.awt.event.MouseEvent;
 
 class TopBar extends JComponent {
     private final PixelArtApp app;
-    private final Rectangle[] swatchRects = new Rectangle[6];
+    private final Rectangle[] swatchRects = new Rectangle[9];
 
     TopBar(PixelArtApp app) {
         this.app = app;
@@ -39,7 +39,7 @@ class TopBar extends JComponent {
         Color[] palette = buildPalette();
         Color base = app.currentBrushColor();
 
-        int mainSize = 56;
+        int mainSize = (int) Math.round(56 * 1.25);
         int mainX = (getWidth() - mainSize) / 2;
         int mainY = 8;
 
@@ -48,29 +48,41 @@ class TopBar extends JComponent {
         g2.setColor(PixelArtApp.BUTTON_BORDER);
         g2.drawRect(mainX, mainY, mainSize, mainSize);
 
-        int smallSize = 28;
+        int smallSize = 26;
         int gap = 6;
         int totalWidth = smallSize * 3 + gap * 2;
         int startX = (getWidth() - totalWidth) / 2;
-        int yTop = mainY + mainSize + 12;
-        int yBottom = yTop + smallSize + gap;
+        int yTop = mainY + mainSize + 10;     // most saturated
+        int yMid = yTop + smallSize + gap;    // base
+        int yBottom = yMid + smallSize + gap; // desaturated
 
         for (int i = 0; i < 3; i++) {
             int x = startX + i * (smallSize + gap);
-            int idxTop = i;
-            int idxBottom = i + 3;
 
-            swatchRects[idxTop] = new Rectangle(x, yTop, smallSize, smallSize);
+            int idxTop = i + 6;     // saturated
+            int idxMid = i;         // base
+            int idxBottom = i + 3;  // desaturated
+
+            Rectangle rTop = new Rectangle(x, yTop, smallSize, smallSize);
+            swatchRects[idxTop] = rTop;
             g2.setColor(palette[idxTop]);
-            g2.fillRect(x, yTop, smallSize, smallSize);
+            g2.fillRect(rTop.x, rTop.y, rTop.width, rTop.height);
             g2.setColor(PixelArtApp.BUTTON_BORDER);
-            g2.drawRect(x, yTop, smallSize, smallSize);
+            g2.drawRect(rTop.x, rTop.y, rTop.width, rTop.height);
 
-            swatchRects[idxBottom] = new Rectangle(x, yBottom, smallSize, smallSize);
-            g2.setColor(palette[idxBottom]);
-            g2.fillRect(x, yBottom, smallSize, smallSize);
+            Rectangle rMid = new Rectangle(x, yMid, smallSize, smallSize);
+            swatchRects[idxMid] = rMid;
+            g2.setColor(palette[idxMid]);
+            g2.fillRect(rMid.x, rMid.y, rMid.width, rMid.height);
             g2.setColor(PixelArtApp.BUTTON_BORDER);
-            g2.drawRect(x, yBottom, smallSize, smallSize);
+            g2.drawRect(rMid.x, rMid.y, rMid.width, rMid.height);
+
+            Rectangle rBot = new Rectangle(x, yBottom, smallSize, smallSize);
+            swatchRects[idxBottom] = rBot;
+            g2.setColor(palette[idxBottom]);
+            g2.fillRect(rBot.x, rBot.y, rBot.width, rBot.height);
+            g2.setColor(PixelArtApp.BUTTON_BORDER);
+            g2.drawRect(rBot.x, rBot.y, rBot.width, rBot.height);
         }
 
         g2.dispose();
@@ -86,16 +98,32 @@ class TopBar extends JComponent {
         Color triad1 = Color.getHSBColor(h1, hsb[1], hsb[2]);
         Color triad2 = Color.getHSBColor(h2, hsb[1], hsb[2]);
 
-        Color compMuted = desaturate(comp, 0.35f);
-        Color triad1Muted = desaturate(triad1, 0.35f);
-        Color triad2Muted = desaturate(triad2, 0.35f);
+        float baseSat = hsb[1];
+        float mutedSat = clampSat(baseSat * 0.25f);
+        float boostSat = clampSat(Math.max(baseSat, 1f - baseSat));
 
-        return new Color[]{comp, triad1, triad2, compMuted, triad1Muted, triad2Muted};
+        Color compMuted = setSaturation(comp, mutedSat);
+        Color triad1Muted = setSaturation(triad1, mutedSat);
+        Color triad2Muted = setSaturation(triad2, mutedSat);
+
+        Color compBoost = setSaturation(comp, boostSat);
+        Color triad1Boost = setSaturation(triad1, boostSat);
+        Color triad2Boost = setSaturation(triad2, boostSat);
+
+        return new Color[]{
+                comp, triad1, triad2,
+                compMuted, triad1Muted, triad2Muted,
+                compBoost, triad1Boost, triad2Boost
+        };
     }
 
-    private Color desaturate(Color c, float strength) {
+    private Color setSaturation(Color c, float sat) {
         float[] hsb = Color.RGBtoHSB(c.getRed(), c.getGreen(), c.getBlue(), null);
-        float sat = Math.max(0f, Math.min(1f, hsb[1] * strength));
-        return Color.getHSBColor(hsb[0], sat, hsb[2]);
+        float s = clampSat(sat);
+        return Color.getHSBColor(hsb[0], s, hsb[2]);
+    }
+
+    private float clampSat(float s) {
+        return Math.max(0f, Math.min(1f, s));
     }
 }

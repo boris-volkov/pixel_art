@@ -23,6 +23,9 @@ class ControlBar extends JComponent {
     private final ActionButton toolStamp;
     private final ActionButton toolFill;
     private final ActionButton toolBlur;
+    private final ActionButton toolMove;
+    private final ActionButton[] layerButtons;
+    private final ActionButton[] visButtons;
     private final List<ActionButton> buttons;
     private SliderControl activeSlider;
     private ActionButton activeButton;
@@ -75,6 +78,20 @@ class ControlBar extends JComponent {
             app.setToolMode(PixelArtApp.ToolMode.BLUR);
             repaint();
         }, true);
+        toolMove = new ActionButton("MV", () -> {
+            app.setToolMode(PixelArtApp.ToolMode.MOVE);
+            repaint();
+        }, true);
+        layerButtons = new ActionButton[]{
+                new ActionButton("L1", () -> { app.setActiveLayer(0); repaint(); }, true),
+                new ActionButton("L2", () -> { app.setActiveLayer(1); repaint(); }, true),
+                new ActionButton("L3", () -> { app.setActiveLayer(2); repaint(); }, true)
+        };
+        visButtons = new ActionButton[]{
+                new ActionButton("V", () -> { app.toggleLayerVisibility(0); repaint(); }, true),
+                new ActionButton("V", () -> { app.toggleLayerVisibility(1); repaint(); }, true),
+                new ActionButton("V", () -> { app.toggleLayerVisibility(2); repaint(); }, true)
+        };
         buttons = List.of(
                 new ActionButton("Fill", () -> app.getCanvas().fill(app.currentBrushColor()), true),
                 new ActionButton("Clear", () -> app.getCanvas().clear(), true),
@@ -152,7 +169,7 @@ class ControlBar extends JComponent {
         // Tool row
         int btnHeightTop = 26;
         int gapTop = 6;
-        ActionButton[] tools = {toolBrush, toolStamp, toolFill, toolBlur};
+        ActionButton[] tools = {toolBrush, toolStamp, toolFill, toolBlur, toolMove};
         int toolWidth = (availableWidth - gapTop * (tools.length - 1)) / tools.length;
         for (int i = 0; i < tools.length; i++) {
             int x = padding + i * (toolWidth + gapTop);
@@ -229,15 +246,6 @@ class ControlBar extends JComponent {
         int btnHeight = 32;
         int spacing = 6;
 
-        int btnWidthFull = (width - spacing) / 2;
-        ActionButton fill = buttons.get(0);
-        ActionButton clear = buttons.get(1);
-        fill.bounds = new Rectangle(padding, y, btnWidthFull, btnHeight);
-        paintButton(g2, fill);
-        clear.bounds = new Rectangle(padding + btnWidthFull + spacing, y, btnWidthFull, btnHeight);
-        paintButton(g2, clear);
-        y += btnHeight + spacing + 4;
-
         int cols = 4;
         int gap = 6;
         int colWidth = (width - (cols - 1) * gap) / cols;
@@ -256,6 +264,31 @@ class ControlBar extends JComponent {
                 button.bounds = new Rectangle(x, currentY, colWidth, rowHeight);
                 paintButton(g2, button);
             }
+        }
+
+        y += rowHeight * 2 + gap + 8;
+
+        int btnWidthFull = (width - spacing) / 2;
+        ActionButton fill = buttons.get(0);
+        ActionButton clear = buttons.get(1);
+        fill.bounds = new Rectangle(padding, y, btnWidthFull, btnHeight);
+        paintButton(g2, fill);
+        clear.bounds = new Rectangle(padding + btnWidthFull + spacing, y, btnWidthFull, btnHeight);
+        paintButton(g2, clear);
+        y += btnHeight + spacing + 4;
+
+        int rowH = btnHeight;
+        int rowGap = 6;
+        for (int i = 0; i < layerButtons.length; i++) {
+            ActionButton b = layerButtons[i];
+            ActionButton v = visButtons[i];
+            int rowY = y + i * (rowH + rowGap);
+            int visWidth = 32;
+            int labelWidth = width - visWidth - 6;
+            b.bounds = new Rectangle(padding, rowY, labelWidth, rowH);
+            v.bounds = new Rectangle(padding + labelWidth + 6, rowY, visWidth, rowH);
+            paintButton(g2, b);
+            paintButton(g2, v);
         }
     }
 
@@ -310,9 +343,19 @@ class ControlBar extends JComponent {
     }
 
     private ActionButton findButtonAt(int x, int y) {
-        for (ActionButton tb : List.of(toolBrush, toolStamp, toolFill, toolBlur)) {
+        for (ActionButton tb : List.of(toolBrush, toolStamp, toolFill, toolBlur, toolMove)) {
             if (tb.bounds != null && tb.bounds.contains(x, y)) {
                 return tb;
+            }
+        }
+        for (ActionButton lb : layerButtons) {
+            if (lb.bounds != null && lb.bounds.contains(x, y)) {
+                return lb;
+            }
+        }
+        for (ActionButton vb : visButtons) {
+            if (vb.bounds != null && vb.bounds.contains(x, y)) {
+                return vb;
             }
         }
         for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider, zoomSlider)) {
@@ -348,8 +391,13 @@ class ControlBar extends JComponent {
     }
 
     private Color themedButtonColor(ActionButton button, String label, boolean accent) {
-        if (isActiveTool(button)) {
+        if (isActiveTool(button) || isActiveLayer(button)) {
             return PixelArtApp.ACCENT;
+        }
+        if (isVisButton(button)) {
+            int idx = visIndex(button);
+            boolean visible = idx >= 0 && app.isLayerVisible(idx);
+            return visible ? PixelArtApp.BUTTON_BG : new Color(180, 60, 60);
         }
         if (label.startsWith("C")) {
             if (label.contains("-")) return new Color(220, 90, 80);
@@ -372,6 +420,26 @@ class ControlBar extends JComponent {
         if (button == toolStamp) return mode == PixelArtApp.ToolMode.STAMP;
         if (button == toolFill) return mode == PixelArtApp.ToolMode.FILL;
         if (button == toolBlur) return mode == PixelArtApp.ToolMode.BLUR;
+        if (button == toolMove) return mode == PixelArtApp.ToolMode.MOVE;
         return false;
+    }
+
+    private boolean isActiveLayer(ActionButton button) {
+        int active = app.getActiveLayer();
+        if (button == layerButtons[0]) return active == 0;
+        if (button == layerButtons[1]) return active == 1;
+        if (button == layerButtons[2]) return active == 2;
+        return false;
+    }
+
+    private boolean isVisButton(ActionButton button) {
+        return button == visButtons[0] || button == visButtons[1] || button == visButtons[2];
+    }
+
+    private int visIndex(ActionButton button) {
+        if (button == visButtons[0]) return 0;
+        if (button == visButtons[1]) return 1;
+        if (button == visButtons[2]) return 2;
+        return -1;
     }
 }

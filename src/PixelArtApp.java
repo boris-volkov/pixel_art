@@ -24,7 +24,7 @@ import java.io.File;
 import java.io.IOException;
 
 public class PixelArtApp {
-    enum ToolMode {BRUSH, STAMP, FILL, BLUR}
+    enum ToolMode {BRUSH, STAMP, FILL, BLUR, MOVE}
 
     static final Color BG = new Color(96, 96, 96);
     static final Color TEXT = new Color(226, 231, 240);
@@ -59,6 +59,8 @@ public class PixelArtApp {
     private int gridSize = 128;
     private int canvasCellSize = computeMaxCellSizeForScreen();
     private ToolMode toolMode = ToolMode.BRUSH;
+    private int activeLayer = 0;
+    private final boolean[] layerVisible = new boolean[]{true, true, true};
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -71,12 +73,12 @@ public class PixelArtApp {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.getContentPane().setBackground(BG);
 
-        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
+        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getActiveLayer, 3, this::isLayerVisible, null);
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
 
         int stampCellSize = 10;
-        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> ToolMode.BRUSH, null, null);
+        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> ToolMode.BRUSH, null, () -> 0, 1, l -> true, null);
         stampCanvas.setCurrentColor(currentBrushColor());
 
         canvasHolder = new CanvasViewport(canvas);
@@ -210,7 +212,7 @@ public class PixelArtApp {
     void rebuildCanvas(int newCols, int newRows) {
         gridSize = Math.max(newCols, newRows);
         canvasCellSize = computeMaxCellSizeForScreen();
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getActiveLayer, 3, this::isLayerVisible, null);
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
@@ -248,7 +250,7 @@ public class PixelArtApp {
         int newCols = oldCols * factor;
         gridSize = newRows;
         canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getActiveLayer, 3, this::isLayerVisible, null);
         for (int r = 0; r < newRows; r++) {
             int srcR = Math.min(oldRows - 1, r / factor);
             for (int c = 0; c < newCols; c++) {
@@ -365,23 +367,44 @@ public class PixelArtApp {
                 }
                 break;
             case "help":
-                console.setStatus("Commands: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | exit");
+                console.setStatus("Commands: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd | dither ordered | resample <factor> | calc | exit");
                 break;
             case "blur":
-                if (parts.length < 3 || !"gaussian".equalsIgnoreCase(parts[1])) {
-                    console.setStatus("Usage: blur gaussian <radius>");
+                if (parts.length < 3) {
+                    console.setStatus("Usage: blur gaussian <radius> | blur motion <angle> <amount>");
                     break;
                 }
-                try {
-                    int radius = Integer.parseInt(parts[2]);
-                    if (radius <= 0) {
-                        console.setStatus("Radius must be > 0");
+                if ("gaussian".equalsIgnoreCase(parts[1])) {
+                    try {
+                        int radius = Integer.parseInt(parts[2]);
+                        if (radius <= 0) {
+                            console.setStatus("Radius must be > 0");
+                            break;
+                        }
+                        canvas.blurGaussian(radius);
+                        console.setStatus("Applied gaussian blur r=" + radius);
+                    } catch (NumberFormatException ex) {
+                        console.setStatus("Radius must be a number");
+                    }
+                } else if ("motion".equalsIgnoreCase(parts[1])) {
+                    if (parts.length < 4) {
+                        console.setStatus("Usage: blur motion <angleDeg> <amount>");
                         break;
                     }
-                    canvas.blurGaussian(radius);
-                    console.setStatus("Applied gaussian blur r=" + radius);
-                } catch (NumberFormatException ex) {
-                    console.setStatus("Radius must be a number");
+                    try {
+                        double angle = Double.parseDouble(parts[2]);
+                        int amt = Integer.parseInt(parts[3]);
+                        if (amt <= 0) {
+                            console.setStatus("Amount must be > 0");
+                            break;
+                        }
+                        canvas.blurMotion(angle, amt);
+                        console.setStatus("Applied motion blur angle=" + angle + " amt=" + amt);
+                    } catch (NumberFormatException ex) {
+                        console.setStatus("Need numeric angle and amount");
+                    }
+                } else {
+                    console.setStatus("Usage: blur gaussian <radius> | blur motion <angle> <amount>");
                 }
                 break;
             case "resample":
@@ -401,10 +424,27 @@ public class PixelArtApp {
                     console.setStatus("Factor must be a number");
                 }
                 break;
+            case "calc":
+                if (parts.length < 2) {
+                    console.setStatus("Usage: calc (<op> <a> <b>) e.g. calc (+ 1 2) or calc (* (+ 1 2) 3)");
+                    break;
+                }
+                try {
+                    String expr = input.substring(input.indexOf(' ') + 1).trim();
+                    double val = evalLisp(expr);
+                    if (Math.abs(val - Math.round(val)) < 1e-9) {
+                        console.setStatus("= " + (long) Math.round(val));
+                    } else {
+                        console.setStatus("= " + val);
+                    }
+                } catch (IllegalArgumentException ex) {
+                    console.setStatus("Calc error: " + ex.getMessage());
+                }
+                break;
             case "exit":
                 System.exit(0);
             default:
-                console.setStatus("Unknown. Try: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | exit");
+                console.setStatus("Unknown. Try: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | calc | exit");
         }
     }
 
@@ -429,7 +469,7 @@ public class PixelArtApp {
         }
         gridSize = w;
         canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
-        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, null);
+        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getActiveLayer, 3, this::isLayerVisible, null);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int argb = img.getRGB(x, y);
@@ -462,12 +502,116 @@ public class PixelArtApp {
         return Math.max(0, Math.min(255, value));
     }
 
+    private double evalLisp(String expr) {
+        expr = expr.trim();
+        if (expr.startsWith("(")) {
+            java.util.ArrayDeque<String> tokens = tokenize(expr);
+            double val = parseList(tokens);
+            if (!tokens.isEmpty()) throw new IllegalArgumentException("Extra tokens");
+            return val;
+        } else {
+            String[] parts = expr.split("\\s+");
+            if (parts.length == 1) {
+                return parseNumber(parts[0]);
+            }
+            String op = parts[0];
+            java.util.List<Double> vals = new java.util.ArrayList<>();
+            for (int i = 1; i < parts.length; i++) {
+                vals.add(parseNumber(parts[i]));
+            }
+            return applyOp(op, vals);
+        }
+    }
+
+    private java.util.ArrayDeque<String> tokenize(String expr) {
+        java.util.ArrayDeque<String> out = new java.util.ArrayDeque<>();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < expr.length(); i++) {
+            char ch = expr.charAt(i);
+            if (ch == '(' || ch == ')' || Character.isWhitespace(ch)) {
+                if (sb.length() > 0) {
+                    out.addLast(sb.toString());
+                    sb.setLength(0);
+                }
+                if (ch == '(' || ch == ')') {
+                    out.addLast(String.valueOf(ch));
+                }
+            } else {
+                sb.append(ch);
+            }
+        }
+        if (sb.length() > 0) out.addLast(sb.toString());
+        return out;
+    }
+
+    private double parseList(java.util.ArrayDeque<String> tokens) {
+        if (tokens.isEmpty()) throw new IllegalArgumentException("Incomplete expression");
+        String t = tokens.removeFirst();
+        if (!"(".equals(t)) throw new IllegalArgumentException("Expected '('");
+        if (tokens.isEmpty()) throw new IllegalArgumentException("Missing operator");
+        String op = tokens.removeFirst();
+        java.util.List<Double> vals = new java.util.ArrayList<>();
+        while (!tokens.isEmpty() && !" )".contains(tokens.peekFirst()) && !")".equals(tokens.peekFirst())) {
+            vals.add(parseAny(tokens));
+        }
+        while (!tokens.isEmpty() && ")".equals(tokens.peekFirst())) {
+            tokens.removeFirst();
+            break;
+        }
+        if (vals.isEmpty()) throw new IllegalArgumentException("Missing operands");
+        return applyOp(op, vals);
+    }
+
+    private double parseAny(java.util.ArrayDeque<String> tokens) {
+        if (tokens.isEmpty()) throw new IllegalArgumentException("Incomplete");
+        String next = tokens.peekFirst();
+        if ("(".equals(next)) {
+            return parseList(tokens);
+        }
+        tokens.removeFirst();
+        return parseNumber(next);
+    }
+
+    private double parseNumber(String t) {
+        try {
+            return Double.parseDouble(t);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Bad token: " + t);
+        }
+    }
+
+    private double applyOp(String op, java.util.List<Double> vals) {
+        if (vals.isEmpty()) throw new IllegalArgumentException("Missing operands");
+        switch (op) {
+            case "+":
+                double sum = 0;
+                for (double v : vals) sum += v;
+                return sum;
+            case "*":
+                double prod = 1;
+                for (double v : vals) prod *= v;
+                return prod;
+            case "-":
+                if (vals.size() == 1) return -vals.get(0);
+                double res = vals.get(0);
+                for (int i = 1; i < vals.size(); i++) res -= vals.get(i);
+                return res;
+            case "/":
+                if (vals.size() == 1) return 1.0 / vals.get(0);
+                double div = vals.get(0);
+                for (int i = 1; i < vals.size(); i++) div /= vals.get(i);
+                return div;
+            default:
+                throw new IllegalArgumentException("Unknown op: " + op);
+        }
+    }
+
     int getRed() { return red; }
     int getGreen() { return green; }
     int getBlue() { return blue; }
-    void setRed(int v) { red = clamp(v); updateBrushTargets(); }
-    void setGreen(int v) { green = clamp(v); updateBrushTargets(); }
-    void setBlue(int v) { blue = clamp(v); updateBrushTargets(); }
+    void setRed(int v) { red = clamp(v); updateBrushTargets(); if (controlBar != null) controlBar.syncSliders(); }
+    void setGreen(int v) { green = clamp(v); updateBrushTargets(); if (controlBar != null) controlBar.syncSliders(); }
+    void setBlue(int v) { blue = clamp(v); updateBrushTargets(); if (controlBar != null) controlBar.syncSliders(); }
     int getSaturationPercent() {
         float[] hsb = Color.RGBtoHSB(red, green, blue, null);
         return Math.round(hsb[1] * 100f);
@@ -493,6 +637,16 @@ public class PixelArtApp {
     ToolMode getToolMode() { return toolMode; }
     void setToolMode(ToolMode mode) { toolMode = mode; }
     PixelCanvas getCanvas() { return canvas; }
+    int getActiveLayer() { return activeLayer; }
+    void setActiveLayer(int layer) { activeLayer = Math.max(0, Math.min(2, layer)); }
+    boolean isLayerVisible(int layer) { return layerVisible[Math.max(0, Math.min(2, layer))]; }
+    void toggleLayerVisibility(int layer) {
+        int idx = Math.max(0, Math.min(2, layer));
+        layerVisible[idx] = !layerVisible[idx];
+        if (canvas != null) {
+            canvas.repaint();
+        }
+    }
 
     private void installPanKeys(JFrame frame) {
         int step = 20;
@@ -501,10 +655,10 @@ public class PixelArtApp {
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("RIGHT"), "panRight");
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("UP"), "panUp");
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("DOWN"), "panDown");
-        root.getActionMap().put("panLeft", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { canvasHolder.pan(-step, 0); } });
-        root.getActionMap().put("panRight", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { canvasHolder.pan(step, 0); } });
-        root.getActionMap().put("panUp", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { canvasHolder.pan(0, -step); } });
-        root.getActionMap().put("panDown", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { canvasHolder.pan(0, step); } });
+        root.getActionMap().put("panLeft", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(-step, 0); } });
+        root.getActionMap().put("panRight", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(step, 0); } });
+        root.getActionMap().put("panUp", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(0, -step); } });
+        root.getActionMap().put("panDown", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(0, step); } });
     }
 
     private void installConsoleToggle(JFrame frame) {

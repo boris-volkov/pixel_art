@@ -12,6 +12,8 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.function.IntConsumer;
+import java.util.function.IntPredicate;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -19,14 +21,17 @@ class PixelCanvas extends javax.swing.JPanel {
     private static final int DITHER_LEVELS = 4;
     private final int columns;
     private final int rows;
+    private final int layerCount;
     private int cellSize;
-    private final Color[][] pixels;
-    private final Deque<Color[][]> undoStack = new ArrayDeque<>();
+    private final Color[][][] layers;
+    private final Deque<Color[][][]> undoStack = new ArrayDeque<>();
     private final int undoLimit = 30;
     private final java.util.function.Consumer<Color> pickCallback;
     private final IntConsumer brushChangeCallback;
     private final Supplier<PixelArtApp.ToolMode> modeSupplier;
     private final Supplier<Color[][]> stampSupplier;
+    private final IntSupplier activeLayerSupplier;
+    private final IntPredicate layerVisiblePredicate;
     private final java.util.function.BooleanSupplier panBlocker;
     private Color currentColor = Color.BLACK;
     private int brushSize = 1;
@@ -36,23 +41,34 @@ class PixelCanvas extends javax.swing.JPanel {
     private boolean constrainStroke = false;
     private int anchorCol = -1;
     private int anchorRow = -1;
+    private Color[][] moveSnapshot = null;
+    private int moveStartCol = 0;
+    private int moveStartRow = 0;
 
     PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback,
                 IntConsumer brushChangeCallback, Supplier<PixelArtApp.ToolMode> modeSupplier,
-                Supplier<Color[][]> stampSupplier, java.util.function.BooleanSupplier panBlocker) {
+                Supplier<Color[][]> stampSupplier, IntSupplier activeLayerSupplier, int layerCount,
+                IntPredicate layerVisiblePredicate, java.util.function.BooleanSupplier panBlocker) {
         this.columns = columns;
         this.rows = rows;
         this.cellSize = cellSize;
-        this.pixels = new Color[rows][columns];
+        this.layerCount = Math.max(1, layerCount);
+        this.layers = new Color[this.layerCount][rows][columns];
         this.pickCallback = pickCallback;
         this.brushChangeCallback = brushChangeCallback;
         this.modeSupplier = modeSupplier;
         this.stampSupplier = stampSupplier;
+        this.activeLayerSupplier = activeLayerSupplier;
+        this.layerVisiblePredicate = layerVisiblePredicate != null ? layerVisiblePredicate : (l -> true);
         this.panBlocker = panBlocker;
         setPreferredSize(new Dimension(columns * cellSize, rows * cellSize));
         setBackground(PixelArtApp.CANVAS_BG);
         setFocusable(true);
         enablePainting();
+    }
+
+    private int activeLayer() {
+        return activeLayerSupplier != null ? Math.max(0, Math.min(layerCount - 1, activeLayerSupplier.getAsInt())) : 0;
     }
 
     void setCurrentColor(Color color) {
@@ -94,9 +110,10 @@ class PixelCanvas extends javax.swing.JPanel {
 
     void clear() {
         pushUndo();
+        int layer = activeLayer();
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < columns; c++) {
-                pixels[r][c] = null;
+                layers[layer][r][c] = null;
             }
         }
         repaint();
@@ -104,9 +121,10 @@ class PixelCanvas extends javax.swing.JPanel {
 
     void fill(Color color) {
         pushUndo();
+        int layer = activeLayer();
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < columns; c++) {
-                pixels[r][c] = color;
+                layers[layer][r][c] = color;
             }
         }
         repaint();
@@ -114,12 +132,41 @@ class PixelCanvas extends javax.swing.JPanel {
 
     void adjustAll(UnaryOperator<Color> adjuster) {
         pushUndo();
+        int layer = activeLayer();
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < columns; c++) {
-                Color color = pixels[r][c];
+                Color color = layers[layer][r][c];
                 if (color != null) {
-                    pixels[r][c] = adjuster.apply(color);
+                    layers[layer][r][c] = adjuster.apply(color);
                 }
+            }
+        }
+        repaint();
+    }
+
+    void flipHorizontal() {
+        pushUndo();
+        int layer = activeLayer();
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < columns / 2; c++) {
+                int mirror = columns - 1 - c;
+                Color tmp = layers[layer][r][c];
+                layers[layer][r][c] = layers[layer][r][mirror];
+                layers[layer][r][mirror] = tmp;
+            }
+        }
+        repaint();
+    }
+
+    void flipVertical() {
+        pushUndo();
+        int layer = activeLayer();
+        for (int c = 0; c < columns; c++) {
+            for (int r = 0; r < rows / 2; r++) {
+                int mirror = rows - 1 - r;
+                Color tmp = layers[layer][r][c];
+                layers[layer][r][c] = layers[layer][mirror][c];
+                layers[layer][mirror][c] = tmp;
             }
         }
         repaint();
@@ -140,6 +187,7 @@ class PixelCanvas extends javax.swing.JPanel {
                 sum += weight;
             }
         }
+        int layer = activeLayer();
         Color[][] next = new Color[rows][columns];
         for (int row = 0; row < rows; row++) {
             for (int col = 0; col < columns; col++) {
@@ -151,7 +199,7 @@ class PixelCanvas extends javax.swing.JPanel {
                         int cc = col + kx;
                         if (cc < 0 || cc >= columns) continue;
                         double w = kernel[ky + r][kx + r];
-                        Color c = pixels[rr][cc];
+                        Color c = layers[layer][rr][cc];
                         if (c == null) c = PixelArtApp.CANVAS_BG;
                         accR += c.getRed() * w;
                         accG += c.getGreen() * w;
@@ -168,45 +216,20 @@ class PixelCanvas extends javax.swing.JPanel {
             }
         }
         for (int row = 0; row < rows; row++) {
-            System.arraycopy(next[row], 0, pixels[row], 0, columns);
-        }
-        repaint();
-    }
-
-    void flipHorizontal() {
-        pushUndo();
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < columns / 2; c++) {
-                int mirror = columns - 1 - c;
-                Color tmp = pixels[r][c];
-                pixels[r][c] = pixels[r][mirror];
-                pixels[r][mirror] = tmp;
-            }
-        }
-        repaint();
-    }
-
-    void flipVertical() {
-        pushUndo();
-        for (int c = 0; c < columns; c++) {
-            for (int r = 0; r < rows / 2; r++) {
-                int mirror = rows - 1 - r;
-                Color tmp = pixels[r][c];
-                pixels[r][c] = pixels[mirror][c];
-                pixels[mirror][c] = tmp;
-            }
+            System.arraycopy(next[row], 0, layers[layer][row], 0, columns);
         }
         repaint();
     }
 
     void ditherFloydSteinberg() {
         pushUndo();
+        int layer = activeLayer();
         double[][] errR = new double[rows][columns];
         double[][] errG = new double[rows][columns];
         double[][] errB = new double[rows][columns];
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < columns; x++) {
-                Color src = pixels[y][x];
+                Color src = layers[layer][y][x];
                 if (src == null) src = PixelArtApp.CANVAS_BG;
                 double r = clampDouble(src.getRed() + errR[y][x]);
                 double g = clampDouble(src.getGreen() + errG[y][x]);
@@ -214,7 +237,7 @@ class PixelCanvas extends javax.swing.JPanel {
                 int qr = quantizeChannel(r);
                 int qg = quantizeChannel(g);
                 int qb = quantizeChannel(b);
-                pixels[y][x] = new Color(qr, qg, qb);
+                layers[layer][y][x] = new Color(qr, qg, qb);
 
                 double dr = r - qr;
                 double dg = g - qg;
@@ -228,7 +251,6 @@ class PixelCanvas extends javax.swing.JPanel {
     }
 
     private void diffuse(double[][] grid, int y, int x, double error) {
-        // Floyd–Steinberg weights
         if (x + 1 < columns) grid[y][x + 1] += error * 7 / 16.0;
         if (y + 1 < rows) {
             if (x > 0) grid[y + 1][x - 1] += error * 3 / 16.0;
@@ -251,14 +273,15 @@ class PixelCanvas extends javax.swing.JPanel {
                 {3, 11, 1, 9},
                 {15, 7, 13, 5}
         };
+        int layer = activeLayer();
         int step = 255 / (DITHER_LEVELS - 1);
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < columns; x++) {
-                Color src = pixels[y][x];
+                Color src = layers[layer][y][x];
                 if (src == null) src = PixelArtApp.CANVAS_BG;
-                int threshold = bayer4[y & 3][x & 3]; // 0..15
-                double t = (threshold + 0.5) / 16.0;   // 0..1
-                pixels[y][x] = new Color(
+                int threshold = bayer4[y & 3][x & 3];
+                double t = (threshold + 0.5) / 16.0;
+                layers[layer][y][x] = new Color(
                         orderedChannel(src.getRed(), step, t),
                         orderedChannel(src.getGreen(), step, t),
                         orderedChannel(src.getBlue(), step, t)
@@ -294,6 +317,10 @@ class PixelCanvas extends javax.swing.JPanel {
                 constrainStroke = e.isShiftDown();
                 anchorCol = e.getX() / cellSize;
                 anchorRow = e.getY() / cellSize;
+                if (modeSupplier != null && modeSupplier.get() == PixelArtApp.ToolMode.MOVE) {
+                    beginMove(anchorCol, anchorRow);
+                    return;
+                }
                 if (e.isAltDown()) {
                     pickColor(e.getX(), e.getY());
                 } else {
@@ -307,12 +334,17 @@ class PixelCanvas extends javax.swing.JPanel {
                 if (panBlocker != null && panBlocker.getAsBoolean()) {
                     return;
                 }
+                if (modeSupplier != null && modeSupplier.get() == PixelArtApp.ToolMode.MOVE) {
+                    applyMove(e.getX() / cellSize, e.getY() / cellSize);
+                    return;
+                }
                 paintAt(e.getX(), e.getY());
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
                 endStroke();
+                endMove();
             }
 
             @Override
@@ -389,9 +421,10 @@ class PixelCanvas extends javax.swing.JPanel {
         endCol = Math.min(columns - 1, endCol);
         endRow = Math.min(rows - 1, endRow);
 
+        int layer = activeLayer();
         for (int r = startRow; r <= endRow; r++) {
             for (int c = startCol; c <= endCol; c++) {
-                pixels[r][c] = currentColor;
+                layers[layer][r][c] = currentColor;
             }
         }
 
@@ -421,6 +454,7 @@ class PixelCanvas extends javax.swing.JPanel {
         if (startCol < 0) startCol = 0;
         if (startRow < 0) startRow = 0;
 
+        int layer = activeLayer();
         for (int sr = 0; sr < stampRows; sr++) {
             for (int sc = 0; sc < stampCols; sc++) {
                 Color s = stamp[sr][sc];
@@ -433,7 +467,7 @@ class PixelCanvas extends javax.swing.JPanel {
                     for (int c = 0; c < scale; c++) {
                         int cc = destCol + c;
                         if (cc > endCol) break;
-                        pixels[rr][cc] = s;
+                        layers[layer][rr][cc] = s;
                     }
                 }
             }
@@ -469,10 +503,7 @@ class PixelCanvas extends javax.swing.JPanel {
         if (column < 0 || column >= columns || row < 0 || row >= rows) {
             return;
         }
-        Color color = pixels[row][column];
-        if (color == null) {
-            color = PixelArtApp.CANVAS_BG;
-        }
+        Color color = compositeAt(row, column);
         if (pickCallback != null) {
             pickCallback.accept(color);
         }
@@ -492,79 +523,41 @@ class PixelCanvas extends javax.swing.JPanel {
         anchorRow = -1;
     }
 
-    private void floodFill(int column, int row) {
-        if (column < 0 || column >= columns || row < 0 || row >= rows) return;
-        Color target = pixels[row][column];
-        Color replacement = currentColor;
-        if (sameColor(target, replacement)) return;
-        boolean[][] visited = new boolean[rows][columns];
-        ArrayDeque<int[]> q = new ArrayDeque<>();
-        q.add(new int[]{row, column});
-        visited[row][column] = true;
-        while (!q.isEmpty()) {
-            int[] pos = q.removeFirst();
-            int r = pos[0];
-            int c = pos[1];
-            pixels[r][c] = replacement;
-            if (c > 0 && !visited[r][c - 1] && sameColor(target, pixels[r][c - 1])) { visited[r][c - 1] = true; q.add(new int[]{r, c - 1}); }
-            if (c < columns - 1 && !visited[r][c + 1] && sameColor(target, pixels[r][c + 1])) { visited[r][c + 1] = true; q.add(new int[]{r, c + 1}); }
-            if (r > 0 && !visited[r - 1][c] && sameColor(target, pixels[r - 1][c])) { visited[r - 1][c] = true; q.add(new int[]{r - 1, c}); }
-            if (r < rows - 1 && !visited[r + 1][c] && sameColor(target, pixels[r + 1][c])) { visited[r + 1][c] = true; q.add(new int[]{r + 1, c}); }
+    private void beginMove(int col, int row) {
+        pushUndo();
+        int layer = activeLayer();
+        moveSnapshot = new Color[rows][columns];
+        for (int r = 0; r < rows; r++) {
+            moveSnapshot[r] = Arrays.copyOf(layers[layer][r], columns);
+        }
+        moveStartCol = col;
+        moveStartRow = row;
+    }
+
+    private void applyMove(int col, int row) {
+        if (moveSnapshot == null) return;
+        int dx = col - moveStartCol;
+        int dy = row - moveStartRow;
+        int layer = activeLayer();
+        for (int r = 0; r < rows; r++) {
+            Arrays.fill(layers[layer][r], null);
+        }
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < columns; c++) {
+                Color src = moveSnapshot[r][c];
+                if (src == null) continue;
+                int nr = r + dy;
+                int nc = c + dx;
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < columns) {
+                    layers[layer][nr][nc] = src;
+                }
+            }
         }
         repaint();
     }
 
-    private boolean sameColor(Color a, Color b) {
-        if (a == null && b == null) return true;
-        if (a == null || b == null) return false;
-        return a.equals(b);
-    }
-
-    private void blurAt(int column, int row) {
-        int radius = Math.max(1, brushSize / 2);
-        int startCol = Math.max(0, column - radius);
-        int endCol = Math.min(columns - 1, column + radius);
-        int startRow = Math.max(0, row - radius);
-        int endRow = Math.min(rows - 1, row + radius);
-        pushUndo();
-        double sigma = Math.max(1.0, radius / 1.5);
-        double twoSigmaSq = 2 * sigma * sigma;
-        Color[][] snapshot = new Color[rows][columns];
-        for (int r = 0; r < rows; r++) {
-            snapshot[r] = Arrays.copyOf(pixels[r], columns);
-        }
-        for (int r = startRow; r <= endRow; r++) {
-            for (int c = startCol; c <= endCol; c++) {
-                double accR = 0, accG = 0, accB = 0, wSum = 0;
-                for (int dy = -radius; dy <= radius; dy++) {
-                    int rr = r + dy;
-                    if (rr < 0 || rr >= rows) continue;
-                    for (int dx = -radius; dx <= radius; dx++) {
-                        int cc = c + dx;
-                        if (cc < 0 || cc >= columns) continue;
-                        if (dx * dx + dy * dy > radius * radius) continue; // keep inside brush footprint
-                        double w = Math.exp(-(dx * dx + dy * dy) / twoSigmaSq);
-                        Color src = snapshot[rr][cc];
-                        if (src == null) src = PixelArtApp.CANVAS_BG;
-                        accR += src.getRed() * w;
-                        accG += src.getGreen() * w;
-                        accB += src.getBlue() * w;
-                        wSum += w;
-                    }
-                }
-                if (wSum > 0) {
-                    int nr = PixelArtApp.clamp((int) Math.round(accR / wSum));
-                    int ng = PixelArtApp.clamp((int) Math.round(accG / wSum));
-                    int nb = PixelArtApp.clamp((int) Math.round(accB / wSum));
-                    pixels[r][c] = new Color(nr, ng, nb);
-                }
-            }
-        }
-        int x = startCol * cellSize;
-        int y = startRow * cellSize;
-        int w = (endCol - startCol + 1) * cellSize;
-        int h = (endRow - startRow + 1) * cellSize;
-        repaint(new Rectangle(x, y, w, h));
+    private void endMove() {
+        moveSnapshot = null;
     }
 
     @Override
@@ -579,7 +572,7 @@ class PixelCanvas extends javax.swing.JPanel {
             for (int c = 0; c < columns; c++) {
                 int x = c * cellSize;
                 int y = r * cellSize;
-                Color color = pixels[r][c];
+                Color color = compositeAt(r, c);
                 if (color != null) {
                     g2.setColor(color);
                     g2.fillRect(x, y, cellSize, cellSize);
@@ -650,14 +643,21 @@ class PixelCanvas extends javax.swing.JPanel {
         g2.dispose();
     }
 
+    private Color compositeAt(int row, int col) {
+        for (int l = layerCount - 1; l >= 0; l--) {
+            if (layerVisiblePredicate.test(l)) {
+                Color c = layers[l][row][col];
+                if (c != null) return c;
+            }
+        }
+        return PixelArtApp.CANVAS_BG;
+    }
+
     BufferedImage toImage() {
         BufferedImage img = new BufferedImage(columns, rows, BufferedImage.TYPE_INT_ARGB);
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < columns; c++) {
-                Color color = pixels[r][c];
-                if (color == null) {
-                    color = PixelArtApp.CANVAS_BG;
-                }
+                Color color = compositeAt(r, c);
                 img.setRGB(c, r, color.getRGB());
             }
         }
@@ -665,16 +665,17 @@ class PixelCanvas extends javax.swing.JPanel {
     }
 
     Color[][] getPixelsCopy() {
+        int layer = activeLayer();
         Color[][] copy = new Color[rows][columns];
         for (int r = 0; r < rows; r++) {
-            copy[r] = Arrays.copyOf(pixels[r], columns);
+            copy[r] = Arrays.copyOf(layers[layer][r], columns);
         }
         return copy;
     }
 
     void setPixelDirect(int row, int col, Color color) {
         if (row < 0 || row >= rows || col < 0 || col >= columns) return;
-        pixels[row][col] = color;
+        layers[0][row][col] = color;
     }
 
     int getRows() { return rows; }
@@ -684,17 +685,22 @@ class PixelCanvas extends javax.swing.JPanel {
         if (undoStack.isEmpty()) {
             return;
         }
-        Color[][] prev = undoStack.pop();
-        for (int r = 0; r < rows; r++) {
-            System.arraycopy(prev[r], 0, pixels[r], 0, columns);
+        Color[][][] prev = undoStack.pop();
+        moveSnapshot = null;
+        for (int l = 0; l < layerCount; l++) {
+            for (int r = 0; r < rows; r++) {
+                System.arraycopy(prev[l][r], 0, layers[l][r], 0, columns);
+            }
         }
         repaint();
     }
 
     private void pushUndo() {
-        Color[][] snapshot = new Color[rows][columns];
-        for (int r = 0; r < rows; r++) {
-            snapshot[r] = Arrays.copyOf(pixels[r], columns);
+        Color[][][] snapshot = new Color[layerCount][rows][columns];
+        for (int l = 0; l < layerCount; l++) {
+            for (int r = 0; r < rows; r++) {
+                snapshot[l][r] = Arrays.copyOf(layers[l][r], columns);
+            }
         }
         undoStack.push(snapshot);
         while (undoStack.size() > undoLimit) {
@@ -710,5 +716,123 @@ class PixelCanvas extends javax.swing.JPanel {
         int base = Math.max(stampCols, stampRows);
         int scale = (int) Math.round((double) brushSize / (double) base);
         return Math.max(1, scale);
+    }
+
+    private void floodFill(int column, int row) {
+        if (column < 0 || column >= columns || row < 0 || row >= rows) return;
+        int layer = activeLayer();
+        Color target = layers[layer][row][column];
+        Color replacement = currentColor;
+        if (sameColor(target, replacement)) return;
+        boolean[][] visited = new boolean[rows][columns];
+        ArrayDeque<int[]> q = new ArrayDeque<>();
+        q.add(new int[]{row, column});
+        visited[row][column] = true;
+        while (!q.isEmpty()) {
+            int[] pos = q.removeFirst();
+            int r = pos[0];
+            int c = pos[1];
+            layers[layer][r][c] = replacement;
+            if (c > 0 && !visited[r][c - 1] && sameColor(target, layers[layer][r][c - 1])) { visited[r][c - 1] = true; q.add(new int[]{r, c - 1}); }
+            if (c < columns - 1 && !visited[r][c + 1] && sameColor(target, layers[layer][r][c + 1])) { visited[r][c + 1] = true; q.add(new int[]{r, c + 1}); }
+            if (r > 0 && !visited[r - 1][c] && sameColor(target, layers[layer][r - 1][c])) { visited[r - 1][c] = true; q.add(new int[]{r - 1, c}); }
+            if (r < rows - 1 && !visited[r + 1][c] && sameColor(target, layers[layer][r + 1][c])) { visited[r + 1][c] = true; q.add(new int[]{r + 1, c}); }
+        }
+        repaint();
+    }
+
+    private boolean sameColor(Color a, Color b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.equals(b);
+    }
+
+    private void blurAt(int column, int row) {
+        int radius = Math.max(1, brushSize / 2);
+        int startCol = Math.max(0, column - radius);
+        int endCol = Math.min(columns - 1, column + radius);
+        int startRow = Math.max(0, row - radius);
+        int endRow = Math.min(rows - 1, row + radius);
+        pushUndo();
+        double sigma = Math.max(1.0, radius / 1.5);
+        double twoSigmaSq = 2 * sigma * sigma;
+        int layer = activeLayer();
+        Color[][] snapshot = new Color[rows][columns];
+        for (int r = 0; r < rows; r++) {
+            snapshot[r] = Arrays.copyOf(layers[layer][r], columns);
+        }
+        for (int r = startRow; r <= endRow; r++) {
+            for (int c = startCol; c <= endCol; c++) {
+                double accR = 0, accG = 0, accB = 0, wSum = 0;
+                for (int dy = -radius; dy <= radius; dy++) {
+                    int rr = r + dy;
+                    if (rr < 0 || rr >= rows) continue;
+                    for (int dx = -radius; dx <= radius; dx++) {
+                        int cc = c + dx;
+                        if (cc < 0 || cc >= columns) continue;
+                        if (dx * dx + dy * dy > radius * radius) continue;
+                        double w = Math.exp(-(dx * dx + dy * dy) / twoSigmaSq);
+                        Color src = snapshot[rr][cc];
+                        if (src == null) src = PixelArtApp.CANVAS_BG;
+                        accR += src.getRed() * w;
+                        accG += src.getGreen() * w;
+                        accB += src.getBlue() * w;
+                        wSum += w;
+                    }
+                }
+                if (wSum > 0) {
+                    int nr = PixelArtApp.clamp((int) Math.round(accR / wSum));
+                    int ng = PixelArtApp.clamp((int) Math.round(accG / wSum));
+                    int nb = PixelArtApp.clamp((int) Math.round(accB / wSum));
+                    layers[layer][r][c] = new Color(nr, ng, nb);
+                }
+            }
+        }
+        int x = startCol * cellSize;
+        int y = startRow * cellSize;
+        int w = (endCol - startCol + 1) * cellSize;
+        int h = (endRow - startRow + 1) * cellSize;
+        repaint(new Rectangle(x, y, w, h));
+    }
+
+    void blurMotion(double angleDegrees, int amount) {
+        int len = Math.max(1, amount);
+        pushUndo();
+        double theta = Math.toRadians(angleDegrees);
+        double dx = Math.cos(theta);
+        double dy = -Math.sin(theta); // screen Y grows down, so invert for standard trig orientation
+        int layer = activeLayer();
+        Color[][] snapshot = new Color[rows][columns];
+        for (int r = 0; r < rows; r++) {
+            snapshot[r] = Arrays.copyOf(layers[layer][r], columns);
+        }
+        Color[][] out = new Color[rows][columns];
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < columns; c++) {
+                double accR = 0, accG = 0, accB = 0;
+                int samples = 0;
+                for (int i = -len; i <= len; i++) {
+                    int sx = c + (int) Math.round(i * dx);
+                    int sy = r + (int) Math.round(i * dy);
+                    if (sx < 0 || sx >= columns || sy < 0 || sy >= rows) continue;
+                    Color src = snapshot[sy][sx];
+                    if (src == null) src = PixelArtApp.CANVAS_BG;
+                    accR += src.getRed();
+                    accG += src.getGreen();
+                    accB += src.getBlue();
+                    samples++;
+                }
+                if (samples > 0) {
+                    int nr = PixelArtApp.clamp((int) Math.round(accR / samples));
+                    int ng = PixelArtApp.clamp((int) Math.round(accG / samples));
+                    int nb = PixelArtApp.clamp((int) Math.round(accB / samples));
+                    out[r][c] = new Color(nr, ng, nb);
+                }
+            }
+        }
+        for (int r = 0; r < rows; r++) {
+            System.arraycopy(out[r], 0, layers[layer][r], 0, columns);
+        }
+        repaint();
     }
 }

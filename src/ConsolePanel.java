@@ -170,4 +170,8 @@ class ConsolePanel extends JComponent {
         KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("focusOwner", focusListener);
         super.removeNotify();
     }
+
+    boolean isFocused() {
+        return hasFocus;
+    }
 }
