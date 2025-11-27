@@ -30,6 +30,7 @@ class PixelCanvas extends javax.swing.JPanel {
     private final IntConsumer brushChangeCallback;
     private final Supplier<PixelArtApp.ToolMode> modeSupplier;
     private final Supplier<Color[][]> stampSupplier;
+    private final Supplier<Color[][][]> onionSupplier;
     private final IntSupplier activeLayerSupplier;
     private final IntPredicate layerVisiblePredicate;
     private final java.util.function.BooleanSupplier panBlocker;
@@ -47,7 +48,8 @@ class PixelCanvas extends javax.swing.JPanel {
 
     PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback,
                 IntConsumer brushChangeCallback, Supplier<PixelArtApp.ToolMode> modeSupplier,
-                Supplier<Color[][]> stampSupplier, IntSupplier activeLayerSupplier, int layerCount,
+                Supplier<Color[][]> stampSupplier, Supplier<Color[][][]> onionSupplier,
+                IntSupplier activeLayerSupplier, int layerCount,
                 IntPredicate layerVisiblePredicate, java.util.function.BooleanSupplier panBlocker) {
         this.columns = columns;
         this.rows = rows;
@@ -58,6 +60,7 @@ class PixelCanvas extends javax.swing.JPanel {
         this.brushChangeCallback = brushChangeCallback;
         this.modeSupplier = modeSupplier;
         this.stampSupplier = stampSupplier;
+        this.onionSupplier = onionSupplier;
         this.activeLayerSupplier = activeLayerSupplier;
         this.layerVisiblePredicate = layerVisiblePredicate != null ? layerVisiblePredicate : (l -> true);
         this.panBlocker = panBlocker;
@@ -640,6 +643,29 @@ class PixelCanvas extends javax.swing.JPanel {
             }
         }
 
+        // Onion skin overlay above current layers so it is visible
+        if (onionSupplier != null) {
+            Color[][][] onions = onionSupplier.get();
+            if (onions != null) {
+                int alpha1 = 160;
+                int alpha2 = 100;
+                for (int idx = 0; idx < onions.length; idx++) {
+                    Color[][] onion = onions[idx];
+                    if (onion == null) continue;
+                    int useAlpha = (idx == 0) ? alpha1 : alpha2;
+                    for (int r = 0; r < rows; r++) {
+                        for (int c = 0; c < columns; c++) {
+                            Color oc = onion[r][c];
+                            if (oc != null) {
+                                g2.setColor(new Color(oc.getRed(), oc.getGreen(), oc.getBlue(), useAlpha));
+                                g2.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         g2.dispose();
     }
 
@@ -665,10 +691,14 @@ class PixelCanvas extends javax.swing.JPanel {
     }
 
     Color[][] getPixelsCopy() {
-        int layer = activeLayer();
+        return getLayerCopy(activeLayer());
+    }
+
+    Color[][] getLayerCopy(int layer) {
+        int idx = Math.max(0, Math.min(layerCount - 1, layer));
         Color[][] copy = new Color[rows][columns];
         for (int r = 0; r < rows; r++) {
-            copy[r] = Arrays.copyOf(layers[layer][r], columns);
+            copy[r] = Arrays.copyOf(layers[idx][r], columns);
         }
         return copy;
     }
@@ -698,6 +728,19 @@ class PixelCanvas extends javax.swing.JPanel {
     void setPixelDirect(int row, int col, Color color) {
         if (row < 0 || row >= rows || col < 0 || col >= columns) return;
         layers[0][row][col] = color;
+    }
+
+    void setLayer(int layer, Color[][] data) {
+        if (data == null) return;
+        int idx = Math.max(0, Math.min(layerCount - 1, layer));
+        if (data.length != rows) return;
+        for (int r = 0; r < rows; r++) {
+            if (data[r].length != columns) return;
+        }
+        for (int r = 0; r < rows; r++) {
+            layers[idx][r] = Arrays.copyOf(data[r], columns);
+        }
+        repaint();
     }
 
     int getRows() { return rows; }

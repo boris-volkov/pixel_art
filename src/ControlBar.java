@@ -28,6 +28,7 @@ class ControlBar extends JComponent {
     private final ActionButton toolMove;
     private final ActionButton[] layerButtons;
     private final ActionButton[] visButtons;
+    private final ActionButton[] animButtons;
     private final List<ActionButton> buttons;
     private SliderControl activeSlider;
     private ActionButton activeButton;
@@ -99,18 +100,14 @@ class ControlBar extends JComponent {
                 }, true)
         };
         visButtons = new ActionButton[] {
-                new ActionButton("V", () -> {
-                    app.toggleLayerVisibility(0);
-                    repaint();
-                }, true),
-                new ActionButton("V", () -> {
-                    app.toggleLayerVisibility(1);
-                    repaint();
-                }, true),
-                new ActionButton("V", () -> {
-                    app.toggleLayerVisibility(2);
-                    repaint();
-                }, true)
+                new ActionButton("V", () -> { app.toggleLayerVisibility(0); repaint(); }, true),
+                new ActionButton("V", () -> { app.toggleLayerVisibility(1); repaint(); }, true),
+                new ActionButton("V", () -> { app.toggleLayerVisibility(2); repaint(); }, true)
+        };
+        animButtons = new ActionButton[] {
+                new ActionButton("A", () -> { app.toggleAnimatedLayer(0); repaint(); }, true),
+                new ActionButton("A", () -> { app.toggleAnimatedLayer(1); repaint(); }, true),
+                new ActionButton("A", () -> { app.toggleAnimatedLayer(2); repaint(); }, true)
         };
         buttons = List.of(
                 new ActionButton("Fill", () -> app.getCanvas().fill(app.currentBrushColor()), true),
@@ -326,13 +323,18 @@ class ControlBar extends JComponent {
         for (int i = 0; i < layerButtons.length; i++) {
             ActionButton b = layerButtons[i];
             ActionButton v = visButtons[i];
+            ActionButton a = animButtons[i];
             int rowY = y + i * (rowH + rowGap);
             int visWidth = 32;
-            int labelWidth = width - visWidth - 6;
+            int animWidth = 28;
+            int gapSmall = 6;
+            int labelWidth = width - visWidth - animWidth - gapSmall * 2;
             b.bounds = new Rectangle(padding, rowY, labelWidth, rowH);
-            v.bounds = new Rectangle(padding + labelWidth + 6, rowY, visWidth, rowH);
+            v.bounds = new Rectangle(padding + labelWidth + gapSmall, rowY, visWidth, rowH);
+            a.bounds = new Rectangle(padding + labelWidth + gapSmall + visWidth + gapSmall, rowY, animWidth, rowH);
             paintButton(g2, b);
             paintButton(g2, v);
+            paintButton(g2, a);
         }
     }
 
@@ -346,8 +348,14 @@ class ControlBar extends JComponent {
         }
         g2.setColor(fill);
         g2.fillRect(button.bounds.x, button.bounds.y, button.bounds.width, button.bounds.height);
-        g2.setColor(PixelArtApp.TEXT);
-        PixelFont.draw(g2, button.label.toUpperCase(), button.bounds, 2, PixelArtApp.TEXT);
+        Color textColor = PixelArtApp.TEXT;
+        if (isLayerButton(button)) {
+            int idx = visIndex(button);
+            if (idx >= 0 && app.isLayerAnimated(idx)) {
+                textColor = new Color(120, 220, 120);
+            }
+        }
+        PixelFont.draw(g2, button.label.toUpperCase(), button.bounds, 2, textColor);
     }
 
     private boolean tryPressButton(MouseEvent e) {
@@ -392,6 +400,11 @@ class ControlBar extends JComponent {
         for (ActionButton tb : List.of(toolBrush, toolStamp, toolFill, toolBlur, toolMove)) {
             if (tb.bounds != null && tb.bounds.contains(x, y)) {
                 return tb;
+            }
+        }
+        for (ActionButton ab : animButtons) {
+            if (ab.bounds != null && ab.bounds.contains(x, y)) {
+                return ab;
             }
         }
         for (ActionButton lb : layerButtons) {
@@ -445,6 +458,11 @@ class ControlBar extends JComponent {
             int idx = visIndex(button);
             boolean visible = idx >= 0 && app.isLayerVisible(idx);
             return visible ? PixelArtApp.BUTTON_BG : new Color(180, 60, 60);
+        }
+        if (isAnimButton(button)) {
+            int idx = animIndex(button);
+            boolean anim = idx >= 0 && app.isLayerAnimated(idx);
+            return anim ? new Color(90, 150, 90) : PixelArtApp.BUTTON_BG;
         }
         if (label.startsWith("C")) {
             if (label.contains("-"))
@@ -502,5 +520,20 @@ class ControlBar extends JComponent {
         if (button == visButtons[2])
             return 2;
         return -1;
+    }
+
+    private boolean isAnimButton(ActionButton button) {
+        return button == animButtons[0] || button == animButtons[1] || button == animButtons[2];
+    }
+
+    private int animIndex(ActionButton button) {
+        if (button == animButtons[0]) return 0;
+        if (button == animButtons[1]) return 1;
+        if (button == animButtons[2]) return 2;
+        return -1;
+    }
+
+    private boolean isLayerButton(ActionButton button) {
+        return button == layerButtons[0] || button == layerButtons[1] || button == layerButtons[2];
     }
 }

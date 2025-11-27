@@ -24,6 +24,8 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 public class PixelArtApp {
@@ -61,6 +63,8 @@ public class PixelArtApp {
     private int currentFrameIndex = 0;
     private Timer playTimer;
     private boolean playing = false;
+    private boolean onionEnabled = false;
+    private boolean[] animatedLayers = new boolean[]{true, false, false}; // default animate L1
     private int red = 32;
     private int green = 32;
     private int blue = 32;
@@ -82,12 +86,13 @@ public class PixelArtApp {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.getContentPane().setBackground(BG);
 
-        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getActiveLayer, 3, this::isLayerVisible, null);
+        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
+        ensureAnimatedLayersSize(canvas.getLayerCount());
 
         int stampCellSize = 10;
-        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> ToolMode.BRUSH, null, () -> 0, 1, l -> true, null);
+        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> ToolMode.BRUSH, null, null, () -> 0, 1, l -> true, null);
         stampCanvas.setCurrentColor(currentBrushColor());
 
         canvasHolder = new CanvasViewport(canvas);
@@ -228,10 +233,11 @@ public class PixelArtApp {
     void rebuildCanvas(int newCols, int newRows) {
         gridSize = Math.max(newCols, newRows);
         canvasCellSize = computeMaxCellSizeForScreen();
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getActiveLayer, 3, this::isLayerVisible, null);
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
+        ensureAnimatedLayersSize(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
         canvasHolder.recenter();
     }
@@ -266,7 +272,7 @@ public class PixelArtApp {
         int newCols = oldCols * factor;
         gridSize = newRows;
         canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getActiveLayer, 3, this::isLayerVisible, null);
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
         for (int r = 0; r < newRows; r++) {
             int srcR = Math.min(oldRows - 1, r / factor);
             for (int c = 0; c < newCols; c++) {
@@ -278,7 +284,7 @@ public class PixelArtApp {
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
-
+        ensureAnimatedLayersSize(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
         if (controlBar != null) controlBar.syncSliders();
     }
@@ -424,6 +430,29 @@ public class PixelArtApp {
                 }
                 break;
             case "animate":
+                if (parts.length >= 2) {
+                    Arrays.fill(animatedLayers, false);
+                    boolean any = false;
+                    for (int i = 1; i < parts.length; i++) {
+                        String token = parts[i].toLowerCase();
+                        if (token.startsWith("l")) {
+                            try {
+                                int target = Integer.parseInt(token.substring(1)) - 1;
+                                if (target >= 0 && target < animatedLayers.length) {
+                                    animatedLayers[target] = true;
+                                    any = true;
+                                }
+                            } catch (NumberFormatException ignored) {
+                                // skip bad token
+                            }
+                        }
+                    }
+                    if (!any) {
+                        console.setStatus("Usage: animate [L1 L2 L3...]");
+                        break;
+                    }
+                    console.setStatus("Animating layers: " + animatedLayersStatus());
+                }
                 if (!timeline.isVisible()) {
                     timeline.setVisible(true);
                     if (frames.isEmpty()) {
@@ -434,6 +463,11 @@ public class PixelArtApp {
                 } else {
                     console.setStatus("Animation panel already open");
                 }
+                break;
+            case "onion":
+                toggleOnion();
+                console.setStatus("Onion " + (onionEnabled ? "ON" : "OFF"));
+                if (canvas != null) canvas.repaint();
                 break;
             case "resample":
                 if (parts.length < 2) {
@@ -497,7 +531,7 @@ public class PixelArtApp {
         }
         gridSize = w;
         canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
-        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getActiveLayer, 3, this::isLayerVisible, null);
+        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int argb = img.getRGB(x, y);
@@ -509,6 +543,7 @@ public class PixelArtApp {
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
 
+        ensureAnimatedLayersSize(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
         if (controlBar != null) controlBar.syncSliders();
     }
@@ -675,11 +710,30 @@ public class PixelArtApp {
             canvas.repaint();
         }
     }
+    boolean isOnionEnabled() { return onionEnabled; }
+    void toggleOnion() { onionEnabled = !onionEnabled; }
 
     // Animation helpers
     List<FrameData> getFrames() { return frames; }
     int getCurrentFrameIndex() { return currentFrameIndex; }
     boolean isPlaying() { return playing; }
+    boolean isLayerAnimated(int layer) { return animatedLayers[Math.max(0, Math.min(animatedLayers.length - 1, layer))]; }
+    void toggleAnimatedLayer(int layer) {
+        int idx = Math.max(0, Math.min(animatedLayers.length - 1, layer));
+        animatedLayers[idx] = !animatedLayers[idx];
+    }
+
+    private void ensureAnimatedLayersSize(int count) {
+        if (animatedLayers.length == count) return;
+        boolean[] prev = animatedLayers;
+        animatedLayers = new boolean[count];
+        for (int i = 0; i < Math.min(count, prev.length); i++) {
+            animatedLayers[i] = prev[i];
+        }
+        if (count > prev.length && prev.length == 0) {
+            animatedLayers[0] = true;
+        }
+    }
 
     void addFrameFromCurrent() {
         saveCurrentFrame();
@@ -695,6 +749,21 @@ public class PixelArtApp {
         frames.add(data);
         currentFrameIndex = frames.size() - 1;
         applyFrame(data);
+        if (timeline != null) timeline.repaint();
+    }
+
+    void deleteCurrentFrame() {
+        if (frames.isEmpty()) return;
+        frames.remove(currentFrameIndex);
+        if (frames.isEmpty()) {
+            currentFrameIndex = 0;
+            FrameData data = createEmptyFrame();
+            frames.add(data);
+            applyFrame(data);
+        } else {
+            currentFrameIndex = Math.max(0, Math.min(currentFrameIndex, frames.size() - 1));
+            applyFrame(frames.get(currentFrameIndex));
+        }
         if (timeline != null) timeline.repaint();
     }
 
@@ -729,15 +798,20 @@ public class PixelArtApp {
             if (playTimer != null) playTimer.stop();
             return;
         }
+        saveCurrentFrame();
         currentFrameIndex = (currentFrameIndex + 1) % frames.size();
         applyFrame(frames.get(currentFrameIndex));
         if (timeline != null) timeline.repaint();
     }
 
     private FrameData captureFrame() {
-        Color[][][] layersCopy = canvas.getLayersCopy();
-        boolean[] visCopy = layerVisible.clone();
-        return new FrameData(layersCopy, visCopy);
+        Color[][][] data = new Color[3][][];
+        for (int l = 0; l < data.length; l++) {
+            if (animatedLayers[l]) {
+                data[l] = canvas.getLayerCopy(l);
+            }
+        }
+        return new FrameData(data);
     }
 
     private void saveCurrentFrame() {
@@ -746,20 +820,71 @@ public class PixelArtApp {
     }
 
     private FrameData createEmptyFrame() {
-        int layerCount = canvas.getLayerCount();
         int rows = canvas.getRows();
         int cols = canvas.getColumns();
-        Color[][][] emptyLayers = new Color[layerCount][rows][cols];
-        boolean[] visCopy = layerVisible.clone();
-        return new FrameData(emptyLayers, visCopy);
+        Color[][][] data = new Color[3][][];
+        for (int l = 0; l < data.length; l++) {
+            if (animatedLayers[l]) {
+                data[l] = new Color[rows][cols];
+            }
+        }
+        return new FrameData(data);
     }
 
     private void applyFrame(FrameData data) {
         if (data == null) return;
-        System.arraycopy(data.visibility, 0, layerVisible, 0, layerVisible.length);
-        canvas.setLayers(data.layers);
+        for (int l = 0; l < data.layers.length; l++) {
+            if (data.layers[l] != null) {
+                canvas.setLayer(l, data.layers[l]);
+            }
+        }
         if (controlBar != null) controlBar.repaint();
         canvas.repaint();
+    }
+
+    Color[][][] getOnionComposite() {
+        if (!onionEnabled || frames.size() < 2 || currentFrameIndex >= frames.size()) return null;
+        int prevIdx = (currentFrameIndex - 1 + frames.size()) % frames.size();
+        int nextIdx = (currentFrameIndex + 1) % frames.size();
+        FrameData prev = frames.get(prevIdx);
+        FrameData next = frames.get(nextIdx);
+        int rows = canvas.getRows();
+        int cols = canvas.getColumns();
+        Color[][] prevComposite = new Color[rows][cols];
+        Color[][] nextComposite = new Color[rows][cols];
+        compositeFrame(prev, prevComposite);
+        compositeFrame(next, nextComposite);
+        return new Color[][][]{prevComposite, nextComposite};
+    }
+
+    private Color pickVisible(FrameData fd, int r, int c) {
+        if (fd == null || fd.layers == null) return null;
+        for (int l = fd.layers.length - 1; l >= 0; l--) {
+            if (fd.layers[l] == null) continue;
+            if (!isLayerVisible(l)) continue;
+            Color cc = fd.layers[l][r][c];
+            if (cc != null) return cc;
+        }
+        return null;
+    }
+
+    private void compositeFrame(FrameData fd, Color[][] out) {
+        if (fd == null || out == null) return;
+        int rows = out.length;
+        int cols = out[0].length;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                out[r][c] = pickVisible(fd, r, c);
+            }
+        }
+    }
+
+    private String animatedLayersStatus() {
+        List<String> parts = new ArrayList<>();
+        for (int i = 0; i < animatedLayers.length; i++) {
+            if (animatedLayers[i]) parts.add("L" + (i + 1));
+        }
+        return String.join(",", parts);
     }
 
     private void installPanKeys(JFrame frame) {
@@ -810,10 +935,8 @@ public class PixelArtApp {
 
     static class FrameData {
         final Color[][][] layers;
-        final boolean[] visibility;
-        FrameData(Color[][][] layers, boolean[] visibility) {
+        FrameData(Color[][][] layers) {
             this.layers = layers;
-            this.visibility = visibility;
         }
     }
 }

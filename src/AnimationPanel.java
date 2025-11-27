@@ -12,7 +12,9 @@ import java.util.List;
 class AnimationPanel extends JComponent {
     private final PixelArtApp app;
     private Rectangle playBounds;
+    private Rectangle onionBounds;
     private Rectangle addBounds;
+    private Rectangle deleteBounds;
     private final List<Rectangle> frameRects = new ArrayList<>();
 
     AnimationPanel(PixelArtApp app) {
@@ -35,8 +37,18 @@ class AnimationPanel extends JComponent {
             repaint();
             return;
         }
+        if (onionBounds != null && onionBounds.contains(x, y)) {
+            app.toggleOnion();
+            repaint();
+            return;
+        }
         if (addBounds != null && addBounds.contains(x, y)) {
             app.addBlankFrame();
+            repaint();
+            return;
+        }
+        if (deleteBounds != null && deleteBounds.contains(x, y)) {
+            app.deleteCurrentFrame();
             repaint();
             return;
         }
@@ -62,12 +74,16 @@ class AnimationPanel extends JComponent {
         int btnWidth = 60;
         int btnHeight = 26;
         playBounds = new Rectangle(padding, padding, btnWidth, btnHeight);
+        onionBounds = new Rectangle(padding + btnWidth + 6, padding, btnWidth, btnHeight);
         addBounds = new Rectangle(padding, padding + btnHeight + 6, btnWidth, btnHeight);
+        deleteBounds = new Rectangle(padding + btnWidth + 6, padding + btnHeight + 6, btnWidth, btnHeight);
 
         drawButton(g2, playBounds, app.isPlaying() ? "STOP" : "PLAY", true);
+        drawButton(g2, onionBounds, "ONION", app.isOnionEnabled());
         drawButton(g2, addBounds, "+", true);
+        drawButton(g2, deleteBounds, "-", true);
 
-        int framesStartX = padding + btnWidth + 12;
+        int framesStartX = padding + btnWidth + 12 + btnWidth + 6; // account for onion button width and gap
         int frameSize = 32;
         int frameGap = 8;
         frameRects.clear();
@@ -89,10 +105,11 @@ class AnimationPanel extends JComponent {
     }
 
     private void drawButton(Graphics2D g2, Rectangle bounds, String label, boolean accent) {
-        g2.setColor(accent ? PixelArtApp.BUTTON_BG : PixelArtApp.BUTTON_BG);
+        g2.setColor(accent ? PixelArtApp.BUTTON_ACTIVE : PixelArtApp.BUTTON_BG);
         g2.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
         g2.setColor(PixelArtApp.BUTTON_BORDER);
         g2.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        PixelFont.drawCentered(g2, label, bounds, 2, PixelArtApp.TEXT);
+        Color text = accent ? new Color(120, 220, 120) : PixelArtApp.TEXT;
+        PixelFont.drawCentered(g2, label, bounds, 2, text);
     }
 }
