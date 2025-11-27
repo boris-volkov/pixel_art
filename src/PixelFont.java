@@ -112,6 +112,10 @@ class PixelFont {
         }
     }
 
+    static void drawCentered(Graphics2D g2, String text, Rectangle bounds, int scale, Color color) {
+        draw(g2, text, bounds, scale, color);
+    }
+
     static void drawLeft(Graphics2D g2, String text, Rectangle bounds, int scale, Color color) {
         g2.setColor(color);
         String upper = text.toUpperCase();

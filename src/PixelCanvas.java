@@ -673,6 +673,28 @@ class PixelCanvas extends javax.swing.JPanel {
         return copy;
     }
 
+    Color[][][] getLayersCopy() {
+        Color[][][] copy = new Color[layerCount][rows][columns];
+        for (int l = 0; l < layerCount; l++) {
+            for (int r = 0; r < rows; r++) {
+                copy[l][r] = Arrays.copyOf(layers[l][r], columns);
+            }
+        }
+        return copy;
+    }
+
+    void setLayers(Color[][][] data) {
+        if (data == null || data.length != layerCount) return;
+        for (int l = 0; l < layerCount; l++) {
+            if (data[l].length != rows) continue;
+            for (int r = 0; r < rows; r++) {
+                if (data[l][r].length != columns) continue;
+                layers[l][r] = Arrays.copyOf(data[l][r], columns);
+            }
+        }
+        repaint();
+    }
+
     void setPixelDirect(int row, int col, Color color) {
         if (row < 0 || row >= rows || col < 0 || col >= columns) return;
         layers[0][row][col] = color;
@@ -680,6 +702,7 @@ class PixelCanvas extends javax.swing.JPanel {
 
     int getRows() { return rows; }
     int getColumns() { return columns; }
+    int getLayerCount() { return layerCount; }
 
     void undo() {
         if (undoStack.isEmpty()) {

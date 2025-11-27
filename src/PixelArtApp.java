@@ -8,6 +8,7 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -22,6 +23,8 @@ import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class PixelArtApp {
     enum ToolMode {BRUSH, STAMP, FILL, BLUR, MOVE}
@@ -52,6 +55,12 @@ public class PixelArtApp {
     private ControlBar controlBar;
     private TopBar topBar;
     private ConsolePanel console;
+    private AnimationPanel timeline;
+    private JPanel southWrap;
+    private final List<FrameData> frames = new ArrayList<>();
+    private int currentFrameIndex = 0;
+    private Timer playTimer;
+    private boolean playing = false;
     private int red = 32;
     private int green = 32;
     private int blue = 32;
@@ -111,9 +120,16 @@ public class PixelArtApp {
         FocusWrap controlWrap = new FocusWrap(controlBar);
         east.add(controlWrap, BorderLayout.CENTER);
 
+        southWrap = new JPanel(new BorderLayout());
+        southWrap.setBackground(BG);
+        timeline = new AnimationPanel(this);
+        timeline.setVisible(false);
+        southWrap.add(timeline, BorderLayout.NORTH);
+        southWrap.add(console, BorderLayout.SOUTH);
+
         frame.add(canvasHolder, BorderLayout.CENTER);
         frame.add(east, BorderLayout.EAST);
-        frame.add(console, BorderLayout.SOUTH);
+        frame.add(southWrap, BorderLayout.SOUTH);
 
         frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
                 .put(KeyStroke.getKeyStroke("control Z"), "undo");
@@ -367,7 +383,7 @@ public class PixelArtApp {
                 }
                 break;
             case "help":
-                console.setStatus("Commands: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd | dither ordered | resample <factor> | calc | exit");
+                console.setStatus("Commands: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd | dither ordered | resample <factor> | calc | animate | exit");
                 break;
             case "blur":
                 if (parts.length < 3) {
@@ -405,6 +421,18 @@ public class PixelArtApp {
                     }
                 } else {
                     console.setStatus("Usage: blur gaussian <radius> | blur motion <angle> <amount>");
+                }
+                break;
+            case "animate":
+                if (!timeline.isVisible()) {
+                    timeline.setVisible(true);
+                    if (frames.isEmpty()) {
+                        addFrameFromCurrent();
+                    }
+                    console.setStatus("Animation panel opened. Frames: " + frames.size());
+                    southWrap.revalidate();
+                } else {
+                    console.setStatus("Animation panel already open");
                 }
                 break;
             case "resample":
@@ -648,6 +676,92 @@ public class PixelArtApp {
         }
     }
 
+    // Animation helpers
+    List<FrameData> getFrames() { return frames; }
+    int getCurrentFrameIndex() { return currentFrameIndex; }
+    boolean isPlaying() { return playing; }
+
+    void addFrameFromCurrent() {
+        saveCurrentFrame();
+        FrameData data = captureFrame();
+        frames.add(data);
+        currentFrameIndex = frames.size() - 1;
+        if (timeline != null) timeline.repaint();
+    }
+
+    void addBlankFrame() {
+        saveCurrentFrame();
+        FrameData data = createEmptyFrame();
+        frames.add(data);
+        currentFrameIndex = frames.size() - 1;
+        applyFrame(data);
+        if (timeline != null) timeline.repaint();
+    }
+
+    void selectFrame(int index) {
+        if (index < 0 || index >= frames.size()) return;
+        saveCurrentFrame();
+        currentFrameIndex = index;
+        applyFrame(frames.get(index));
+        if (timeline != null) timeline.repaint();
+    }
+
+    void togglePlayback() {
+        if (frames.isEmpty()) {
+            console.setStatus("No frames to play");
+            return;
+        }
+        playing = !playing;
+        if (playing) {
+            if (playTimer == null) {
+                playTimer = new Timer(180, e -> advanceFrame());
+            }
+            playTimer.start();
+        } else {
+            if (playTimer != null) playTimer.stop();
+        }
+        if (timeline != null) timeline.repaint();
+    }
+
+    private void advanceFrame() {
+        if (frames.isEmpty()) {
+            playing = false;
+            if (playTimer != null) playTimer.stop();
+            return;
+        }
+        currentFrameIndex = (currentFrameIndex + 1) % frames.size();
+        applyFrame(frames.get(currentFrameIndex));
+        if (timeline != null) timeline.repaint();
+    }
+
+    private FrameData captureFrame() {
+        Color[][][] layersCopy = canvas.getLayersCopy();
+        boolean[] visCopy = layerVisible.clone();
+        return new FrameData(layersCopy, visCopy);
+    }
+
+    private void saveCurrentFrame() {
+        if (frames.isEmpty()) return;
+        frames.set(currentFrameIndex, captureFrame());
+    }
+
+    private FrameData createEmptyFrame() {
+        int layerCount = canvas.getLayerCount();
+        int rows = canvas.getRows();
+        int cols = canvas.getColumns();
+        Color[][][] emptyLayers = new Color[layerCount][rows][cols];
+        boolean[] visCopy = layerVisible.clone();
+        return new FrameData(emptyLayers, visCopy);
+    }
+
+    private void applyFrame(FrameData data) {
+        if (data == null) return;
+        System.arraycopy(data.visibility, 0, layerVisible, 0, layerVisible.length);
+        canvas.setLayers(data.layers);
+        if (controlBar != null) controlBar.repaint();
+        canvas.repaint();
+    }
+
     private void installPanKeys(JFrame frame) {
         int step = 20;
         JComponent root = frame.getRootPane();
@@ -692,5 +806,14 @@ public class PixelArtApp {
                 }
             }
         });
+    }
+
+    static class FrameData {
+        final Color[][][] layers;
+        final boolean[] visibility;
+        FrameData(Color[][][] layers, boolean[] visibility) {
+            this.layers = layers;
+            this.visibility = visibility;
+        }
     }
 }
