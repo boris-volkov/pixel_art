@@ -39,7 +39,7 @@ class TopBar extends JComponent {
         Color[] palette = buildPalette();
         Color base = app.currentBrushColor();
 
-        int mainSize = (int) Math.round(56 * 1.25);
+        int mainSize = 80;
         int mainX = (getWidth() - mainSize) / 2;
         int mainY = 8;
 

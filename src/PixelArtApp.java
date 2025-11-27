@@ -659,6 +659,20 @@ public class PixelArtApp {
         root.getActionMap().put("panRight", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(step, 0); } });
         root.getActionMap().put("panUp", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(0, -step); } });
         root.getActionMap().put("panDown", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(0, step); } });
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("OPEN_BRACKET"), "brushDec");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("CLOSE_BRACKET"), "brushInc");
+        root.getActionMap().put("brushDec", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused()) return;
+                setBrushSize(Math.max(1, getBrushSize() - 1));
+            }
+        });
+        root.getActionMap().put("brushInc", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused()) return;
+                setBrushSize(getBrushSize() + 1);
+            }
+        });
     }
 
     private void installConsoleToggle(JFrame frame) {

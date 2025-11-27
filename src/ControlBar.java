@@ -11,6 +11,8 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 
 class ControlBar extends JComponent {
+    private static final int SLIDER_LABEL_OFFSET = 4; // adjust label Y relative to slider row
+    private static final int SLIDER_TRACK_OFFSET = 8; // adjust track Y relative to slider row
     private final PixelArtApp app;
     private final SliderControl redSlider;
     private final SliderControl greenSlider;
@@ -33,32 +35,32 @@ class ControlBar extends JComponent {
 
     ControlBar(PixelArtApp app) {
         this.app = app;
-        redSlider = new SliderControl("R", 0, 255, app.getRed(), v -> {
+        redSlider = new SliderControl("RED", 0, 255, app.getRed(), v -> {
             app.setRed(v);
             repaint();
         });
-        greenSlider = new SliderControl("G", 0, 255, app.getGreen(), v -> {
+        greenSlider = new SliderControl("GRN", 0, 255, app.getGreen(), v -> {
             app.setGreen(v);
             repaint();
         });
-        blueSlider = new SliderControl("B", 0, 255, app.getBlue(), v -> {
+        blueSlider = new SliderControl("BLU", 0, 255, app.getBlue(), v -> {
             app.setBlue(v);
             repaint();
         });
-        satSlider = new SliderControl("Sat", 0, 100, app.getSaturationPercent(), v -> {
+        satSlider = new SliderControl("SAT", 0, 100, app.getSaturationPercent(), v -> {
             app.setSaturationPercent(v);
             repaint();
         });
-        valSlider = new SliderControl("Brt", 0, 100, app.getBrightnessPercent(), v -> {
+        valSlider = new SliderControl("BRI", 0, 100, app.getBrightnessPercent(), v -> {
             app.setBrightnessPercent(v);
             repaint();
         });
-        brushSlider = new SliderControl("Brush", 1, 64, app.getBrushSize(), v -> {
+        brushSlider = new SliderControl("SIZE", 1, 64, app.getBrushSize(), v -> {
             app.setBrushSize(v);
             repaint();
         });
         int zoomCap = PixelArtApp.MAX_CELL_SIZE;
-        zoomSlider = new SliderControl("Zoom", 2, Math.max(zoomCap, 2), app.getCanvasCellSize(), v -> {
+        zoomSlider = new SliderControl("ZOOM", 2, Math.max(zoomCap, 2), app.getCanvasCellSize(), v -> {
             app.setCanvasCellSize(v);
             repaint();
         });
@@ -82,28 +84,69 @@ class ControlBar extends JComponent {
             app.setToolMode(PixelArtApp.ToolMode.MOVE);
             repaint();
         }, true);
-        layerButtons = new ActionButton[]{
-                new ActionButton("L1", () -> { app.setActiveLayer(0); repaint(); }, true),
-                new ActionButton("L2", () -> { app.setActiveLayer(1); repaint(); }, true),
-                new ActionButton("L3", () -> { app.setActiveLayer(2); repaint(); }, true)
+        layerButtons = new ActionButton[] {
+                new ActionButton("L1", () -> {
+                    app.setActiveLayer(0);
+                    repaint();
+                }, true),
+                new ActionButton("L2", () -> {
+                    app.setActiveLayer(1);
+                    repaint();
+                }, true),
+                new ActionButton("L3", () -> {
+                    app.setActiveLayer(2);
+                    repaint();
+                }, true)
         };
-        visButtons = new ActionButton[]{
-                new ActionButton("V", () -> { app.toggleLayerVisibility(0); repaint(); }, true),
-                new ActionButton("V", () -> { app.toggleLayerVisibility(1); repaint(); }, true),
-                new ActionButton("V", () -> { app.toggleLayerVisibility(2); repaint(); }, true)
+        visButtons = new ActionButton[] {
+                new ActionButton("V", () -> {
+                    app.toggleLayerVisibility(0);
+                    repaint();
+                }, true),
+                new ActionButton("V", () -> {
+                    app.toggleLayerVisibility(1);
+                    repaint();
+                }, true),
+                new ActionButton("V", () -> {
+                    app.toggleLayerVisibility(2);
+                    repaint();
+                }, true)
         };
         buttons = List.of(
                 new ActionButton("Fill", () -> app.getCanvas().fill(app.currentBrushColor()), true),
                 new ActionButton("Clear", () -> app.getCanvas().clear(), true),
-                new ActionButton("C-", () -> app.getCanvas().adjustAll(color -> PixelArtApp.adjustChannel(color, PixelArtApp.COLOR_STEP, 0, 0)), false),
-                new ActionButton("C+", () -> app.getCanvas().adjustAll(color -> PixelArtApp.adjustChannel(color, -PixelArtApp.COLOR_STEP, 0, 0)), false),
-                new ActionButton("M-", () -> app.getCanvas().adjustAll(color -> PixelArtApp.adjustChannel(color, 0, PixelArtApp.COLOR_STEP, 0)), false),
-                new ActionButton("M+", () -> app.getCanvas().adjustAll(color -> PixelArtApp.adjustChannel(color, 0, -PixelArtApp.COLOR_STEP, 0)), false),
-                new ActionButton("Y-", () -> app.getCanvas().adjustAll(color -> PixelArtApp.adjustChannel(color, 0, 0, PixelArtApp.COLOR_STEP)), false),
-                new ActionButton("Y+", () -> app.getCanvas().adjustAll(color -> PixelArtApp.adjustChannel(color, 0, 0, -PixelArtApp.COLOR_STEP)), false),
-                new ActionButton("B-", () -> app.getCanvas().adjustAll(color -> PixelArtApp.adjustBrightness(color, -PixelArtApp.BRIGHT_STEP)), false),
-                new ActionButton("B+", () -> app.getCanvas().adjustAll(color -> PixelArtApp.adjustBrightness(color, PixelArtApp.BRIGHT_STEP)), false)
-        );
+                new ActionButton("C-",
+                        () -> app.getCanvas()
+                                .adjustAll(color -> PixelArtApp.adjustChannel(color, PixelArtApp.COLOR_STEP, 0, 0)),
+                        false),
+                new ActionButton("C+",
+                        () -> app.getCanvas()
+                                .adjustAll(color -> PixelArtApp.adjustChannel(color, -PixelArtApp.COLOR_STEP, 0, 0)),
+                        false),
+                new ActionButton("M-",
+                        () -> app.getCanvas()
+                                .adjustAll(color -> PixelArtApp.adjustChannel(color, 0, PixelArtApp.COLOR_STEP, 0)),
+                        false),
+                new ActionButton("M+",
+                        () -> app.getCanvas()
+                                .adjustAll(color -> PixelArtApp.adjustChannel(color, 0, -PixelArtApp.COLOR_STEP, 0)),
+                        false),
+                new ActionButton("Y-",
+                        () -> app.getCanvas()
+                                .adjustAll(color -> PixelArtApp.adjustChannel(color, 0, 0, PixelArtApp.COLOR_STEP)),
+                        false),
+                new ActionButton("Y+",
+                        () -> app.getCanvas()
+                                .adjustAll(color -> PixelArtApp.adjustChannel(color, 0, 0, -PixelArtApp.COLOR_STEP)),
+                        false),
+                new ActionButton("B-",
+                        () -> app.getCanvas()
+                                .adjustAll(color -> PixelArtApp.adjustBrightness(color, -PixelArtApp.BRIGHT_STEP)),
+                        false),
+                new ActionButton("B+",
+                        () -> app.getCanvas()
+                                .adjustAll(color -> PixelArtApp.adjustBrightness(color, PixelArtApp.BRIGHT_STEP)),
+                        false));
 
         setOpaque(true);
         setBackground(PixelArtApp.BG);
@@ -162,14 +205,14 @@ class ControlBar extends JComponent {
         g2.setColor(PixelArtApp.BG);
         g2.fillRect(0, 0, getWidth(), getHeight());
 
-        int padding = 14;
+        int padding = 16;
         int y = padding;
         int availableWidth = getWidth() - padding * 2;
 
         // Tool row
         int btnHeightTop = 26;
         int gapTop = 6;
-        ActionButton[] tools = {toolBrush, toolStamp, toolFill, toolBlur, toolMove};
+        ActionButton[] tools = { toolBrush, toolStamp, toolFill, toolBlur, toolMove };
         int toolWidth = (availableWidth - gapTop * (tools.length - 1)) / tools.length;
         for (int i = 0; i < tools.length; i++) {
             int x = padding + i * (toolWidth + gapTop);
@@ -194,17 +237,17 @@ class ControlBar extends JComponent {
 
     private int drawSlider(Graphics2D g2, SliderControl slider, int padding, int y, int width) {
         int scale = 2;
-        int trackHeight = 6 * scale;
+        int trackHeight = 5 * scale;
         int thumbWidth = 4 * scale;
-        int thumbHeight = 7 * scale;
-        int labelWidth = 90;
+        int thumbHeight = 6 * scale;
+        int labelWidth = 120;
         int valueWidth = 0;
         int btnWidth = 24;
         int gap = 4;
         int trackWidth = width - labelWidth - valueWidth - (btnWidth * 2) - (gap * 3);
         trackWidth = Math.max(30, trackWidth);
         int trackX = padding + labelWidth + btnWidth + gap;
-        int trackY = y + 12;
+        int trackY = y + SLIDER_TRACK_OFFSET;
 
         slider.track = new Rectangle(trackX, trackY, trackWidth, trackHeight);
         int valueX = trackX + (int) Math.round(slider.ratio() * trackWidth);
@@ -212,8 +255,9 @@ class ControlBar extends JComponent {
         slider.thumb = new Rectangle(valueX - thumbWidth / 2, thumbY, thumbWidth, thumbHeight);
 
         g2.setColor(PixelArtApp.TEXT);
-        String valueText = String.valueOf(slider.value);
-        g2.drawString(slider.label + " : " + valueText, padding, trackY + 8);
+        String valueText = slider.label + " : " + slider.value;
+        Rectangle labelRect = new Rectangle(padding, y + SLIDER_LABEL_OFFSET, labelWidth, 18);
+        PixelFont.drawLeft(g2, valueText.toUpperCase(), labelRect, 2, PixelArtApp.TEXT);
 
         g2.setColor(PixelArtApp.BUTTON_BG);
         g2.fillRect(trackX, trackY, trackWidth, trackHeight);
@@ -239,12 +283,12 @@ class ControlBar extends JComponent {
         paintButton(g2, slider.minus);
         paintButton(g2, slider.plus);
 
-        return y + 30;
+        return y + 36;
     }
 
     private void drawButtons(Graphics2D g2, int padding, int y, int width) {
         int btnHeight = 32;
-        int spacing = 6;
+        int spacing = 10;
 
         int cols = 4;
         int gap = 6;
@@ -252,8 +296,8 @@ class ControlBar extends JComponent {
         int rowHeight = btnHeight;
 
         ActionButton[][] grid = {
-                {buttons.get(3), buttons.get(5), buttons.get(7), buttons.get(9)}, // top: C+, M+, Y+, B+
-                {buttons.get(2), buttons.get(4), buttons.get(6), buttons.get(8)}  // bottom: C-, M-, Y-, B-
+                { buttons.get(3), buttons.get(5), buttons.get(7), buttons.get(9) }, // top: C+, M+, Y+, B+
+                { buttons.get(2), buttons.get(4), buttons.get(6), buttons.get(8) } // bottom: C-, M-, Y-, B-
         };
 
         for (int row = 0; row < 2; row++) {
@@ -278,7 +322,7 @@ class ControlBar extends JComponent {
         y += btnHeight + spacing + 4;
 
         int rowH = btnHeight;
-        int rowGap = 6;
+        int rowGap = 8;
         for (int i = 0; i < layerButtons.length; i++) {
             ActionButton b = layerButtons[i];
             ActionButton v = visButtons[i];
@@ -316,7 +360,8 @@ class ControlBar extends JComponent {
     }
 
     private SliderControl findSlider(int x, int y) {
-        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider, zoomSlider)) {
+        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider,
+                zoomSlider)) {
             if (s.track != null && s.track.contains(x, y)) {
                 return s;
             }
@@ -328,7 +373,8 @@ class ControlBar extends JComponent {
     }
 
     private void updateSliderFromMouse(SliderControl slider, int mouseX) {
-        if (slider.track == null) return;
+        if (slider.track == null)
+            return;
         int relative = mouseX - slider.track.x;
         int clamped = Math.max(0, Math.min(slider.track.width, relative));
         double ratio = slider.track.width == 0 ? 0 : (double) clamped / slider.track.width;
@@ -358,7 +404,8 @@ class ControlBar extends JComponent {
                 return vb;
             }
         }
-        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider, zoomSlider)) {
+        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider,
+                zoomSlider)) {
             for (ActionButton b : List.of(s.minus, s.plus)) {
                 if (b.bounds != null && b.bounds.contains(x, y)) {
                     return b;
@@ -400,15 +447,18 @@ class ControlBar extends JComponent {
             return visible ? PixelArtApp.BUTTON_BG : new Color(180, 60, 60);
         }
         if (label.startsWith("C")) {
-            if (label.contains("-")) return new Color(220, 90, 80);
+            if (label.contains("-"))
+                return new Color(220, 90, 80);
             return PixelArtApp.CYAN_BTN;
         }
         if (label.startsWith("M")) {
-            if (label.contains("-")) return new Color(90, 180, 90);
+            if (label.contains("-"))
+                return new Color(90, 180, 90);
             return PixelArtApp.MAGENTA_BTN;
         }
         if (label.startsWith("Y")) {
-            if (label.contains("-")) return new Color(80, 120, 200);
+            if (label.contains("-"))
+                return new Color(80, 120, 200);
             return PixelArtApp.YELLOW_BTN;
         }
         return accent ? PixelArtApp.ACCENT.darker() : PixelArtApp.BUTTON_BG;
@@ -416,19 +466,27 @@ class ControlBar extends JComponent {
 
     private boolean isActiveTool(ActionButton button) {
         PixelArtApp.ToolMode mode = app.getToolMode();
-        if (button == toolBrush) return mode == PixelArtApp.ToolMode.BRUSH;
-        if (button == toolStamp) return mode == PixelArtApp.ToolMode.STAMP;
-        if (button == toolFill) return mode == PixelArtApp.ToolMode.FILL;
-        if (button == toolBlur) return mode == PixelArtApp.ToolMode.BLUR;
-        if (button == toolMove) return mode == PixelArtApp.ToolMode.MOVE;
+        if (button == toolBrush)
+            return mode == PixelArtApp.ToolMode.BRUSH;
+        if (button == toolStamp)
+            return mode == PixelArtApp.ToolMode.STAMP;
+        if (button == toolFill)
+            return mode == PixelArtApp.ToolMode.FILL;
+        if (button == toolBlur)
+            return mode == PixelArtApp.ToolMode.BLUR;
+        if (button == toolMove)
+            return mode == PixelArtApp.ToolMode.MOVE;
         return false;
     }
 
     private boolean isActiveLayer(ActionButton button) {
         int active = app.getActiveLayer();
-        if (button == layerButtons[0]) return active == 0;
-        if (button == layerButtons[1]) return active == 1;
-        if (button == layerButtons[2]) return active == 2;
+        if (button == layerButtons[0])
+            return active == 0;
+        if (button == layerButtons[1])
+            return active == 1;
+        if (button == layerButtons[2])
+            return active == 2;
         return false;
     }
 
@@ -437,9 +495,12 @@ class ControlBar extends JComponent {
     }
 
     private int visIndex(ActionButton button) {
-        if (button == visButtons[0]) return 0;
-        if (button == visButtons[1]) return 1;
-        if (button == visButtons[2]) return 2;
+        if (button == visButtons[0])
+            return 0;
+        if (button == visButtons[1])
+            return 1;
+        if (button == visButtons[2])
+            return 2;
         return -1;
     }
 }
