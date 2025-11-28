@@ -15,13 +15,14 @@ class AnimationPanel extends JComponent {
     private Rectangle onionBounds;
     private Rectangle addBounds;
     private Rectangle deleteBounds;
+    private Rectangle dupBounds;
     private final List<Rectangle> frameRects = new ArrayList<>();
 
     AnimationPanel(PixelArtApp app) {
         this.app = app;
         setOpaque(true);
         setBackground(PixelArtApp.BG);
-        setPreferredSize(new java.awt.Dimension(0, 80));
+        setPreferredSize(new java.awt.Dimension(0, 110));
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -52,6 +53,11 @@ class AnimationPanel extends JComponent {
             repaint();
             return;
         }
+        if (dupBounds != null && dupBounds.contains(x, y)) {
+            app.duplicateCurrentFrame();
+            repaint();
+            return;
+        }
         for (int i = 0; i < frameRects.size(); i++) {
             Rectangle r = frameRects.get(i);
             if (r.contains(x, y)) {
@@ -77,13 +83,15 @@ class AnimationPanel extends JComponent {
         onionBounds = new Rectangle(padding + btnWidth + 6, padding, btnWidth, btnHeight);
         addBounds = new Rectangle(padding, padding + btnHeight + 6, btnWidth, btnHeight);
         deleteBounds = new Rectangle(padding + btnWidth + 6, padding + btnHeight + 6, btnWidth, btnHeight);
+        dupBounds = new Rectangle(padding, padding + (btnHeight + 6) * 2, btnWidth, btnHeight);
 
         drawButton(g2, playBounds, app.isPlaying() ? "STOP" : "PLAY", true);
         drawButton(g2, onionBounds, "ONION", app.isOnionEnabled());
         drawButton(g2, addBounds, "+", true);
         drawButton(g2, deleteBounds, "-", true);
+        drawButton(g2, dupBounds, "DUP", true);
 
-        int framesStartX = padding + btnWidth + 12 + btnWidth + 6; // account for onion button width and gap
+        int framesStartX = padding + btnWidth * 2 + 12 + 6;
         int frameSize = 32;
         int frameGap = 8;
         frameRects.clear();

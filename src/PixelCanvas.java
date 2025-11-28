@@ -65,7 +65,8 @@ class PixelCanvas extends javax.swing.JPanel {
         this.layerVisiblePredicate = layerVisiblePredicate != null ? layerVisiblePredicate : (l -> true);
         this.panBlocker = panBlocker;
         setPreferredSize(new Dimension(columns * cellSize, rows * cellSize));
-        setBackground(PixelArtApp.CANVAS_BG);
+        setOpaque(false);
+        setBackground(new Color(0, 0, 0, 0));
         setFocusable(true);
         enablePainting();
     }
@@ -203,7 +204,7 @@ class PixelCanvas extends javax.swing.JPanel {
                         if (cc < 0 || cc >= columns) continue;
                         double w = kernel[ky + r][kx + r];
                         Color c = layers[layer][rr][cc];
-                        if (c == null) c = PixelArtApp.CANVAS_BG;
+                        if (c == null) continue; // skip transparent
                         accR += c.getRed() * w;
                         accG += c.getGreen() * w;
                         accB += c.getBlue() * w;
@@ -215,6 +216,8 @@ class PixelCanvas extends javax.swing.JPanel {
                     int ng = PixelArtApp.clamp((int) Math.round(accG / weightSum));
                     int nb = PixelArtApp.clamp((int) Math.round(accB / weightSum));
                     next[row][col] = new Color(nr, ng, nb);
+                } else {
+                    next[row][col] = null;
                 }
             }
         }
@@ -568,9 +571,6 @@ class PixelCanvas extends javax.swing.JPanel {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g.create();
 
-        g2.setColor(getBackground());
-        g2.fillRect(0, 0, getWidth(), getHeight());
-
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < columns; c++) {
                 int x = c * cellSize;
@@ -666,6 +666,10 @@ class PixelCanvas extends javax.swing.JPanel {
             }
         }
 
+        // Outline canvas bounds
+        g2.setColor(PixelArtApp.BUTTON_BORDER);
+        g2.drawRect(0, 0, columns * cellSize - 1, rows * cellSize - 1);
+
         g2.dispose();
     }
 
@@ -676,7 +680,7 @@ class PixelCanvas extends javax.swing.JPanel {
                 if (c != null) return c;
             }
         }
-        return PixelArtApp.CANVAS_BG;
+        return null;
     }
 
     BufferedImage toImage() {
@@ -684,7 +688,11 @@ class PixelCanvas extends javax.swing.JPanel {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < columns; c++) {
                 Color color = compositeAt(r, c);
-                img.setRGB(c, r, color.getRGB());
+                if (color == null) {
+                    img.setRGB(c, r, 0x00000000); // transparent
+                } else {
+                    img.setRGB(c, r, color.getRGB());
+                }
             }
         }
         return img;
@@ -839,7 +847,7 @@ class PixelCanvas extends javax.swing.JPanel {
                         if (dx * dx + dy * dy > radius * radius) continue;
                         double w = Math.exp(-(dx * dx + dy * dy) / twoSigmaSq);
                         Color src = snapshot[rr][cc];
-                        if (src == null) src = PixelArtApp.CANVAS_BG;
+                        if (src == null) continue; // skip transparent pixels
                         accR += src.getRed() * w;
                         accG += src.getGreen() * w;
                         accB += src.getBlue() * w;
@@ -851,6 +859,8 @@ class PixelCanvas extends javax.swing.JPanel {
                     int ng = PixelArtApp.clamp((int) Math.round(accG / wSum));
                     int nb = PixelArtApp.clamp((int) Math.round(accB / wSum));
                     layers[layer][r][c] = new Color(nr, ng, nb);
+                } else {
+                    layers[layer][r][c] = null; // remains transparent if no color contributed
                 }
             }
         }

@@ -324,6 +324,7 @@ class ControlBar extends JComponent {
             ActionButton b = layerButtons[i];
             ActionButton v = visButtons[i];
             ActionButton a = animButtons[i];
+            b.label = app.getLayerName(i);
             int rowY = y + i * (rowH + rowGap);
             int visWidth = 32;
             int animWidth = 28;
