@@ -61,6 +61,7 @@ public class PixelArtApp {
     private int[] currentFrameIndex;
     private Timer playTimer;
     private boolean playing = false;
+    private int playCursor = 0;
     private boolean onionEnabled = false;
     private boolean[] animatedLayers;
     private String[] layerNames = new String[]{"L1", "L2", "L3"};
@@ -862,6 +863,21 @@ public class PixelArtApp {
             canvas.repaint();
         }
     }
+    void swapLayerUp(int idx) {
+        ensureFrameCapacity();
+        if (idx <= 0 || idx >= canvas.getLayerCount()) return;
+        swapArray(layerFrames, idx, idx - 1);
+        swapInt(currentFrameIndex, idx, idx - 1);
+        swapBoolean(layerVisible, idx, idx - 1);
+        swapBoolean(animatedLayers, idx, idx - 1);
+        swapString(layerNames, idx, idx - 1);
+        canvas.swapLayers(idx, idx - 1);
+        if (activeLayer == idx) activeLayer = idx - 1;
+        else if (activeLayer == idx - 1) activeLayer = idx;
+        if (controlBar != null) controlBar.repaint();
+        if (topBar != null) topBar.repaint();
+        canvas.repaint();
+    }
     boolean isOnionEnabled() { return onionEnabled; }
     void toggleOnion() { onionEnabled = !onionEnabled; }
 
@@ -1011,6 +1027,7 @@ public class PixelArtApp {
         if (index < 0 || index >= frames.size()) return;
         saveCurrentFrames();
         currentFrameIndex[layer] = index;
+        playCursor = index;
         syncOtherLayersToActive(index);
         applyAllCurrentFrames();
         if (timeline != null) timeline.repaint();
@@ -1029,6 +1046,7 @@ public class PixelArtApp {
             return;
         }
         syncOtherLayersToActive(currentFrameIndex[activeLayer]);
+        playCursor = currentFrameIndex[activeLayer];
         playing = !playing;
         if (playing) {
             if (playTimer == null) {
@@ -1045,14 +1063,25 @@ public class PixelArtApp {
     private void advanceFrame() {
         ensureFrameCapacity();
         saveCurrentFrames();
-        List<FrameData> activeList = layerFrames[activeLayer];
-        if (activeList.isEmpty() || activeList.size() < 1) {
+        int maxLen = 0;
+        for (int l = 0; l < layerFrames.length; l++) {
+            List<FrameData> lf = layerFrames[l];
+            if (lf == null) continue;
+            if (!animatedLayers[l]) continue;
+            maxLen = Math.max(maxLen, lf.size());
+        }
+        if (maxLen <= 0) {
             playing = false;
             if (playTimer != null) playTimer.stop();
             return;
         }
-        currentFrameIndex[activeLayer] = (currentFrameIndex[activeLayer] + 1) % activeList.size();
-        syncOtherLayersToActive(currentFrameIndex[activeLayer]);
+        playCursor = (playCursor + 1) % maxLen;
+        for (int l = 0; l < layerFrames.length; l++) {
+            List<FrameData> lf = layerFrames[l];
+            if (lf == null || lf.isEmpty()) continue;
+            if (!animatedLayers[l]) continue;
+            currentFrameIndex[l] = playCursor % lf.size();
+        }
         applyAllCurrentFrames();
         if (timeline != null) timeline.repaint();
     }
@@ -1084,6 +1113,7 @@ public class PixelArtApp {
     private void resetAnimationState() {
         if (playTimer != null) playTimer.stop();
         playing = false;
+        playCursor = 0;
         onionEnabled = false;
         initLayerFrames(canvas != null ? canvas.getLayerCount() : 3);
         if (layerNames == null) layerNames = new String[animatedLayers.length];
@@ -1148,6 +1178,27 @@ public class PixelArtApp {
                 out[r][c] = layerData[r][c];
             }
         }
+    }
+
+    private <T> void swapArray(T[] arr, int i, int j) {
+        T tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+    }
+    private void swapInt(int[] arr, int i, int j) {
+        int tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+    }
+    private void swapBoolean(boolean[] arr, int i, int j) {
+        boolean tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+    }
+    private void swapString(String[] arr, int i, int j) {
+        String tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
     }
 
     private int delayFromFPS() {

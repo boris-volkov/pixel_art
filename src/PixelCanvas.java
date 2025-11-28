@@ -75,6 +75,10 @@ class PixelCanvas extends javax.swing.JPanel {
         return activeLayerSupplier != null ? Math.max(0, Math.min(layerCount - 1, activeLayerSupplier.getAsInt())) : 0;
     }
 
+    private int toCell(int coordinate) {
+        return Math.floorDiv(coordinate, cellSize);
+    }
+
     void setCurrentColor(Color color) {
         this.currentColor = color;
     }
@@ -321,8 +325,8 @@ class PixelCanvas extends javax.swing.JPanel {
                 }
                 requestFocusInWindow();
                 constrainStroke = e.isShiftDown();
-                anchorCol = e.getX() / cellSize;
-                anchorRow = e.getY() / cellSize;
+                anchorCol = toCell(e.getX());
+                anchorRow = toCell(e.getY());
                 if (modeSupplier != null && modeSupplier.get() == PixelArtApp.ToolMode.MOVE) {
                     beginMove(anchorCol, anchorRow);
                     return;
@@ -341,7 +345,7 @@ class PixelCanvas extends javax.swing.JPanel {
                     return;
                 }
                 if (modeSupplier != null && modeSupplier.get() == PixelArtApp.ToolMode.MOVE) {
-                    applyMove(e.getX() / cellSize, e.getY() / cellSize);
+                    applyMove(toCell(e.getX()), toCell(e.getY()));
                     return;
                 }
                 paintAt(e.getX(), e.getY());
@@ -378,8 +382,9 @@ class PixelCanvas extends javax.swing.JPanel {
     }
 
     private void paintAt(int x, int y) {
-        int column = x / cellSize;
-        int row = y / cellSize;
+        int column = toCell(x);
+        int row = toCell(y);
+        PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
         if (constrainStroke && anchorCol >= 0 && anchorRow >= 0) {
             int dx = column - anchorCol;
             int dy = row - anchorRow;
@@ -389,19 +394,24 @@ class PixelCanvas extends javax.swing.JPanel {
                 column = anchorCol;
             }
         }
-        if (column < 0 || column >= columns || row < 0 || row >= rows) {
+        boolean isStamp = mode == PixelArtApp.ToolMode.STAMP;
+        if (!isStamp && (column < 0 || column >= columns || row < 0 || row >= rows)) {
             return;
         }
         if (!strokeActive) {
             pushUndo();
             strokeActive = true;
         }
-        applyBrush(column, row);
+        applyBrush(column, row, mode);
         updateHover(column * cellSize, row * cellSize);
     }
 
     private void applyBrush(int column, int row) {
         PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
+        applyBrush(column, row, mode);
+    }
+
+    private void applyBrush(int column, int row, PixelArtApp.ToolMode mode) {
         switch (mode) {
             case STAMP:
                 if (stampSupplier != null) applyStamp(column, row);
@@ -455,11 +465,8 @@ class PixelCanvas extends javax.swing.JPanel {
 
         int startCol = column - stampWidth / 2;
         int startRow = row - stampHeight / 2;
-        int endCol = Math.min(columns - 1, startCol + stampWidth - 1);
-        int endRow = Math.min(rows - 1, startRow + stampHeight - 1);
-
-        if (startCol < 0) startCol = 0;
-        if (startRow < 0) startRow = 0;
+        int endCol = startCol + stampWidth - 1;
+        int endRow = startRow + stampHeight - 1;
 
         int layer = activeLayer();
         for (int sr = 0; sr < stampRows; sr++) {
@@ -470,25 +477,31 @@ class PixelCanvas extends javax.swing.JPanel {
                 int destRow = startRow + sr * scale;
                 for (int r = 0; r < scale; r++) {
                     int rr = destRow + r;
-                    if (rr > endRow) break;
+                    if (rr < 0 || rr >= rows) continue;
                     for (int c = 0; c < scale; c++) {
                         int cc = destCol + c;
-                        if (cc > endCol) break;
+                        if (cc < 0 || cc >= columns) continue;
                         layers[layer][rr][cc] = s;
                     }
                 }
             }
         }
-        int x = startCol * cellSize;
-        int y = startRow * cellSize;
-        int w = (endCol - startCol + 1) * cellSize;
-        int h = (endRow - startRow + 1) * cellSize;
-        repaint(new Rectangle(x, y, w, h));
+        int clipStartCol = Math.max(0, startCol);
+        int clipStartRow = Math.max(0, startRow);
+        int clipEndCol = Math.min(columns - 1, endCol);
+        int clipEndRow = Math.min(rows - 1, endRow);
+        if (clipEndCol >= clipStartCol && clipEndRow >= clipStartRow) {
+            int x = clipStartCol * cellSize;
+            int y = clipStartRow * cellSize;
+            int w = (clipEndCol - clipStartCol + 1) * cellSize;
+            int h = (clipEndRow - clipStartRow + 1) * cellSize;
+            repaint(new Rectangle(x, y, w, h));
+        }
     }
 
     private void updateHover(int x, int y) {
-        int column = x / cellSize;
-        int row = y / cellSize;
+        int column = toCell(x);
+        int row = toCell(y);
         if (column < 0 || column >= columns || row < 0 || row >= rows) {
             if (hoverCol != -1 || hoverRow != -1) {
                 hoverCol = -1;
@@ -595,10 +608,8 @@ class PixelCanvas extends javax.swing.JPanel {
                     int stampHeight = stampRows * scale;
                     int startCol = hoverCol - stampWidth / 2;
                     int startRow = hoverRow - stampHeight / 2;
-                    int endCol = Math.min(columns - 1, startCol + stampWidth - 1);
-                    int endRow = Math.min(rows - 1, startRow + stampHeight - 1);
-                    if (startCol < 0) startCol = 0;
-                    if (startRow < 0) startRow = 0;
+                    int endCol = startCol + stampWidth - 1;
+                    int endRow = startRow + stampHeight - 1;
 
                     for (int sr = 0; sr < stampRows; sr++) {
                         for (int sc = 0; sc < stampCols; sc++) {
@@ -608,20 +619,20 @@ class PixelCanvas extends javax.swing.JPanel {
                             int destRow = startRow + sr * scale;
                             for (int r = 0; r < scale; r++) {
                                 int rr = destRow + r;
-                                if (rr > endRow) break;
+                                if (rr < 0 || rr >= rows) continue;
                                 for (int c = 0; c < scale; c++) {
                                     int cc = destCol + c;
-                                    if (cc > endCol) break;
+                                    if (cc < 0 || cc >= columns) continue;
                                     g2.setColor(new Color(s.getRed(), s.getGreen(), s.getBlue(), 120));
                                     g2.fillRect(cc * cellSize, rr * cellSize, cellSize, cellSize);
                                 }
                             }
                         }
                     }
-                    int x = startCol * cellSize;
-                    int y = startRow * cellSize;
-                    int w = (endCol - startCol + 1) * cellSize;
-                    int h = (endRow - startRow + 1) * cellSize;
+                    int x = Math.max(0, startCol) * cellSize;
+                    int y = Math.max(0, startRow) * cellSize;
+                    int w = (Math.min(columns - 1, endCol) - Math.max(0, startCol) + 1) * cellSize;
+                    int h = (Math.min(rows - 1, endRow) - Math.max(0, startRow) + 1) * cellSize;
                     g2.setColor(new Color(PixelArtApp.ACCENT.getRed(), PixelArtApp.ACCENT.getGreen(), PixelArtApp.ACCENT.getBlue(), 180));
                     g2.setStroke(new BasicStroke(2f));
                     g2.drawRect(x, y, w - 1, h - 1);
@@ -748,6 +759,16 @@ class PixelCanvas extends javax.swing.JPanel {
         }
         for (int r = 0; r < rows; r++) {
             layers[idx][r] = Arrays.copyOf(data[r], columns);
+        }
+        repaint();
+    }
+    void swapLayers(int a, int b) {
+        if (a < 0 || b < 0 || a >= layerCount || b >= layerCount || a == b) return;
+        pushUndo();
+        for (int r = 0; r < rows; r++) {
+            Color[] tmp = layers[a][r];
+            layers[a][r] = layers[b][r];
+            layers[b][r] = tmp;
         }
         repaint();
     }

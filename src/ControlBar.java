@@ -29,6 +29,7 @@ class ControlBar extends JComponent {
     private final ActionButton toolErase;
     private final ActionButton[] layerButtons;
     private final ActionButton[] visButtons;
+    private final ActionButton[] moveUpButtons;
     private final List<ActionButton> buttons;
     private SliderControl activeSlider;
     private ActionButton activeButton;
@@ -107,6 +108,11 @@ class ControlBar extends JComponent {
                 new ActionButton("V", () -> { app.toggleLayerVisibility(0); repaint(); }, true),
                 new ActionButton("V", () -> { app.toggleLayerVisibility(1); repaint(); }, true),
                 new ActionButton("V", () -> { app.toggleLayerVisibility(2); repaint(); }, true)
+        };
+        moveUpButtons = new ActionButton[] {
+                new ActionButton("^", () -> { app.swapLayerUp(0); repaint(); }, true),
+                new ActionButton("^", () -> { app.swapLayerUp(1); repaint(); }, true),
+                new ActionButton("^", () -> { app.swapLayerUp(2); repaint(); }, true)
         };
         buttons = List.of(
                 new ActionButton("Fill", () -> app.getCanvas().fill(app.currentBrushColor()), true),
@@ -322,15 +328,19 @@ class ControlBar extends JComponent {
         for (int i = 0; i < layerButtons.length; i++) {
             ActionButton b = layerButtons[i];
             ActionButton v = visButtons[i];
+            ActionButton up = moveUpButtons[i];
             b.label = app.getLayerName(i);
             int rowY = y + i * (rowH + rowGap);
             int visWidth = 32;
+            int upWidth = 28;
             int gapSmall = 6;
-            int labelWidth = width - visWidth - gapSmall;
+            int labelWidth = width - visWidth - upWidth - gapSmall * 2;
             b.bounds = new Rectangle(padding, rowY, labelWidth, rowH);
             v.bounds = new Rectangle(padding + labelWidth + gapSmall, rowY, visWidth, rowH);
+            up.bounds = new Rectangle(padding + labelWidth + gapSmall + visWidth + gapSmall, rowY, upWidth, rowH);
             paintButton(g2, b);
             paintButton(g2, v);
+            paintButton(g2, up);
         }
     }
 
@@ -399,6 +409,11 @@ class ControlBar extends JComponent {
         for (ActionButton vb : visButtons) {
             if (vb.bounds != null && vb.bounds.contains(x, y)) {
                 return vb;
+            }
+        }
+        for (ActionButton ub : moveUpButtons) {
+            if (ub.bounds != null && ub.bounds.contains(x, y)) {
+                return ub;
             }
         }
         for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider,
