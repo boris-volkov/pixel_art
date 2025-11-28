@@ -21,7 +21,12 @@ import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -343,6 +348,30 @@ public class PixelArtApp {
                     console.setStatus("Save-seq failed: " + ex.getMessage());
                 }
                 break;
+            case "save-project":
+                if (parts.length < 2) {
+                    console.setStatus("Usage: save-project <file>");
+                    return;
+                }
+                try {
+                    saveProject(parts[1]);
+                    console.setStatus("Project saved to " + parts[1]);
+                } catch (IOException ex) {
+                    console.setStatus("Save-project failed: " + ex.getMessage());
+                }
+                break;
+            case "load-project":
+                if (parts.length < 2) {
+                    console.setStatus("Usage: load-project <file>");
+                    return;
+                }
+                try {
+                    loadProject(parts[1]);
+                    console.setStatus("Project loaded from " + parts[1]);
+                } catch (IOException | ClassNotFoundException ex) {
+                    console.setStatus("Load-project failed: " + ex.getMessage());
+                }
+                break;
             case "load":
                 if (parts.length < 2) {
                     console.setStatus("Usage: load <file.png>");
@@ -415,7 +444,7 @@ public class PixelArtApp {
                 }
                 break;
             case "help":
-                console.setStatus("Commands: save <file.png> | save-sequence <base.png> | load <file.png> | resolution | new <size> | flip h|v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd|ordered | resample <factor> | calc <expr> | animate [layer] | framerate <fps> | duplicate | rename L# <name> | exit");
+                console.setStatus("Commands: save <file.png> | save-sequence <base.png> | save-project <file> | load-project <file> | load <file.png> | resolution | new <size> | flip h|v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd|ordered | resample <factor> | calc <expr> | animate [layer] | framerate <fps> | duplicate | rename L# <name> | exit");
                 break;
             case "blur":
                 if (parts.length < 3) {
@@ -661,6 +690,82 @@ public class PixelArtApp {
             ImageIO.write(img, format, new File(outName));
         }
         applyAllCurrentFrames();
+    }
+
+    private void saveProject(String path) throws IOException {
+        ensureFrameCapacity();
+        ProjectData data = new ProjectData();
+        data.cols = canvas.getColumns();
+        data.rows = canvas.getRows();
+        data.cellSize = canvasCellSize;
+        data.layerNames = layerNames.clone();
+        data.layerVisible = layerVisible.clone();
+        data.animatedLayers = animatedLayers.clone();
+        data.currentFrameIndex = currentFrameIndex.clone();
+        data.activeLayer = activeLayer;
+        data.brushSize = brushSize;
+        data.red = red;
+        data.green = green;
+        data.blue = blue;
+        data.frameRate = frameRate;
+        data.viewportBg = viewportBg;
+        data.layerFrames = new ArrayList<>();
+        for (List<FrameData> lf : layerFrames) {
+            List<Color[][]> saved = new ArrayList<>();
+            for (FrameData fd : lf) {
+                saved.add(cloneLayer(fd.layer));
+            }
+            data.layerFrames.add(saved);
+        }
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(path))) {
+            oos.writeObject(data);
+        }
+    }
+
+    private void loadProject(String path) throws IOException, ClassNotFoundException {
+        if (playTimer != null) playTimer.stop();
+        playing = false;
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
+            ProjectData data = (ProjectData) ois.readObject();
+            gridSize = Math.max(data.cols, data.rows);
+            canvasCellSize = Math.min(MAX_CELL_SIZE, Math.max(2, data.cellSize));
+            PixelCanvas newCanvas = new PixelCanvas(data.cols, data.rows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, data.layerFrames.size(), this::isLayerVisible, null);
+            canvas = newCanvas;
+            canvasHolder.setCanvas(newCanvas);
+            viewportBg = data.viewportBg != null ? data.viewportBg : BG;
+            canvasHolder.setBackground(viewportBg);
+            ensureLayerNamesSize(data.layerNames.length);
+            System.arraycopy(data.layerNames, 0, layerNames, 0, Math.min(layerNames.length, data.layerNames.length));
+            for (int i = 0; i < Math.min(layerVisible.length, data.layerVisible.length); i++) {
+                layerVisible[i] = data.layerVisible[i];
+            }
+            animatedLayers = Arrays.copyOf(data.animatedLayers, data.layerFrames.size());
+            currentFrameIndex = Arrays.copyOf(data.currentFrameIndex, data.layerFrames.size());
+            brushSize = data.brushSize;
+            red = data.red;
+            green = data.green;
+            blue = data.blue;
+            frameRate = data.frameRate;
+            activeLayer = Math.max(0, Math.min(data.activeLayer, data.layerFrames.size() - 1));
+            initLayerFrames(data.layerFrames.size());
+            for (int l = 0; l < data.layerFrames.size(); l++) {
+                List<Color[][]> saved = data.layerFrames.get(l);
+                List<FrameData> dest = layerFrames[l];
+                dest.clear();
+                for (Color[][] layer : saved) {
+                    dest.add(new FrameData(cloneLayer(layer)));
+                }
+                if (dest.isEmpty()) {
+                    dest.add(createEmptyFrameForLayer(l));
+                }
+            }
+            applyAllCurrentFrames();
+            updateBrushTargets(currentBrushColor());
+            canvas.setBrushSize(brushSize);
+            if (controlBar != null) controlBar.syncSliders();
+            if (timeline != null) timeline.repaint();
+            if (topBar != null) topBar.repaint();
+        }
     }
 
     private String prefixFileName(String base, String idx, String format) {
@@ -981,7 +1086,8 @@ public class PixelArtApp {
         FrameData data = createEmptyFrameForLayer(layer);
         frames.add(insertAt, data);
         currentFrameIndex[layer] = insertAt;
-        applyFrameForLayer(layer, data);
+        syncOtherLayersToActive(currentFrameIndex[layer]);
+        applyAllCurrentFrames();
         if (timeline != null) timeline.repaint();
     }
 
@@ -998,7 +1104,8 @@ public class PixelArtApp {
         int insertAt = Math.min(frames.size(), currentFrameIndex[layer] + 1);
         frames.add(insertAt, snapshot);
         currentFrameIndex[layer] = insertAt;
-        applyFrameForLayer(layer, snapshot);
+        syncOtherLayersToActive(currentFrameIndex[layer]);
+        applyAllCurrentFrames();
         if (timeline != null) timeline.repaint();
     }
 
@@ -1180,6 +1287,15 @@ public class PixelArtApp {
         }
     }
 
+    private Color[][] cloneLayer(Color[][] src) {
+        if (src == null) return null;
+        Color[][] copy = new Color[src.length][];
+        for (int r = 0; r < src.length; r++) {
+            copy[r] = Arrays.copyOf(src[r], src[r].length);
+        }
+        return copy;
+    }
+
     private <T> void swapArray(T[] arr, int i, int j) {
         T tmp = arr[i];
         arr[i] = arr[j];
@@ -1251,10 +1367,28 @@ public class PixelArtApp {
         });
     }
 
-    static class FrameData {
+    static class FrameData implements Serializable {
         final Color[][] layer;
         FrameData(Color[][] layer) {
             this.layer = layer;
         }
+    }
+
+    private static class ProjectData implements Serializable {
+        int cols;
+        int rows;
+        int cellSize;
+        String[] layerNames;
+        boolean[] layerVisible;
+        boolean[] animatedLayers;
+        int[] currentFrameIndex;
+        int activeLayer;
+        int brushSize;
+        int red;
+        int green;
+        int blue;
+        int frameRate;
+        Color viewportBg;
+        List<List<Color[][]>> layerFrames;
     }
 }
