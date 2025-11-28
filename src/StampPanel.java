@@ -75,12 +75,14 @@ class StampPanel extends JPanel {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             Color fill = PixelArtApp.BUTTON_BG;
-            if (pressed) fill = PixelArtApp.BUTTON_ACTIVE;
-            else if (hover) fill = PixelArtApp.BUTTON_HOVER;
+            if (pressed)
+                fill = PixelArtApp.BUTTON_ACTIVE;
+            else if (hover)
+                fill = PixelArtApp.BUTTON_HOVER;
             g2.setColor(fill);
             g2.fillRect(0, 0, getWidth(), getHeight());
             g2.setColor(PixelArtApp.TEXT);
-            PixelFont.draw(g2, "S-CLR", new java.awt.Rectangle(0, 0, getWidth(), getHeight()), 2, PixelArtApp.TEXT);
+            PixelFont.draw(g2, "CLR", new java.awt.Rectangle(0, 0, getWidth(), getHeight()), 2, PixelArtApp.TEXT);
             g2.dispose();
         }
     }

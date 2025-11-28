@@ -415,6 +415,7 @@ class PixelCanvas extends javax.swing.JPanel {
             default:
                 break;
         }
+        boolean erase = (mode == PixelArtApp.ToolMode.ERASER);
 
         int half = brushSize / 2;
         int startCol = column - half;
@@ -430,7 +431,7 @@ class PixelCanvas extends javax.swing.JPanel {
         int layer = activeLayer();
         for (int r = startRow; r <= endRow; r++) {
             for (int c = startCol; c <= endCol; c++) {
-                layers[layer][r][c] = currentColor;
+                layers[layer][r][c] = erase ? null : currentColor;
             }
         }
 
@@ -892,7 +893,7 @@ class PixelCanvas extends javax.swing.JPanel {
                     int sy = r + (int) Math.round(i * dy);
                     if (sx < 0 || sx >= columns || sy < 0 || sy >= rows) continue;
                     Color src = snapshot[sy][sx];
-                    if (src == null) src = PixelArtApp.CANVAS_BG;
+                    if (src == null) continue;
                     accR += src.getRed();
                     accG += src.getGreen();
                     accB += src.getBlue();

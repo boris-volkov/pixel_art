@@ -12,10 +12,9 @@ import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
+import java.awt.Graphics2D;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
-import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
@@ -25,11 +24,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.List;
 
 public class PixelArtApp {
-    enum ToolMode {BRUSH, STAMP, FILL, BLUR, MOVE}
+    enum ToolMode {BRUSH, STAMP, FILL, BLUR, MOVE, ERASER}
 
     static final Color BG = new Color(96, 96, 96);
     static final Color TEXT = new Color(226, 231, 240);
@@ -59,12 +57,12 @@ public class PixelArtApp {
     private ConsolePanel console;
     private AnimationPanel timeline;
     private JPanel southWrap;
-    private final List<FrameData> frames = new ArrayList<>();
-    private int currentFrameIndex = 0;
+    private List<FrameData>[] layerFrames;
+    private int[] currentFrameIndex;
     private Timer playTimer;
     private boolean playing = false;
     private boolean onionEnabled = false;
-    private boolean[] animatedLayers = new boolean[]{true, false, false}; // default animate L1
+    private boolean[] animatedLayers;
     private String[] layerNames = new String[]{"L1", "L2", "L3"};
     private int frameRate = 6; // fps
     private Color viewportBg = BG;
@@ -92,11 +90,14 @@ public class PixelArtApp {
         canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
-        ensureAnimatedLayersSize(canvas.getLayerCount());
         ensureLayerNamesSize(canvas.getLayerCount());
+        initLayerFrames(canvas.getLayerCount());
 
         int stampCellSize = 10;
-        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> ToolMode.BRUSH, null, null, () -> 0, 1, l -> true, null);
+        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> {
+            ToolMode mode = getToolMode();
+            return mode == ToolMode.ERASER ? ToolMode.ERASER : ToolMode.BRUSH;
+        }, null, null, () -> 0, 1, l -> true, null);
         stampCanvas.setCurrentColor(currentBrushColor());
 
         canvasHolder = new CanvasViewport(canvas);
@@ -242,8 +243,8 @@ public class PixelArtApp {
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
-        ensureAnimatedLayersSize(newCanvas.getLayerCount());
         ensureLayerNamesSize(newCanvas.getLayerCount());
+        initLayerFrames(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
         canvasHolder.recenter();
     }
@@ -291,8 +292,8 @@ public class PixelArtApp {
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
-        ensureAnimatedLayersSize(newCanvas.getLayerCount());
         ensureLayerNamesSize(newCanvas.getLayerCount());
+        initLayerFrames(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
         if (controlBar != null) controlBar.syncSliders();
     }
@@ -354,7 +355,11 @@ public class PixelArtApp {
                 }
                 break;
             case "resolution":
-                console.setStatus("Resolution: " + gridSize + "x" + gridSize);
+                if (canvas != null) {
+                    console.setStatus("Resolution: " + canvas.getColumns() + "x" + canvas.getRows());
+                } else {
+                    console.setStatus("Resolution: " + gridSize + "x" + gridSize);
+                }
                 break;
             case "new":
                 if (parts.length < 2) {
@@ -409,7 +414,7 @@ public class PixelArtApp {
                 }
                 break;
             case "help":
-                console.setStatus("Commands: save <file.png> | save-sequence <base.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd | dither ordered | resample <factor> | calc | animate | framerate <fps> | exit");
+                console.setStatus("Commands: save <file.png> | save-sequence <base.png> | load <file.png> | resolution | new <size> | flip h|v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd|ordered | resample <factor> | calc <expr> | animate [layer] | framerate <fps> | duplicate | rename L# <name> | exit");
                 break;
             case "blur":
                 if (parts.length < 3) {
@@ -450,49 +455,28 @@ public class PixelArtApp {
                 }
                 break;
             case "animate":
+                ensureFrameCapacity();
+                saveCurrentFrames();
                 if (parts.length >= 2) {
-                    Arrays.fill(animatedLayers, false);
-                    boolean any = false;
-                    for (int i = 1; i < parts.length; i++) {
-                        String token = parts[i].trim();
-                        String lower = token.toLowerCase();
-                        if (lower.startsWith("l")) {
-                            try {
-                                int target = Integer.parseInt(lower.substring(1)) - 1;
-                                if (target >= 0 && target < animatedLayers.length) {
-                                    animatedLayers[target] = true;
-                                    any = true;
-                                    continue;
-                                }
-                            } catch (NumberFormatException ignored) {
-                                // fall through to name match
-                            }
-                        }
+                    String target = parts[1].toLowerCase();
+                    Integer layerIdx = parseLayerToken(target);
+                    if (layerIdx != null) {
+                        setActiveLayer(layerIdx);
+                    } else {
                         // match by layer name
                         for (int idx = 0; idx < layerNames.length; idx++) {
-                            if (layerNames[idx].equalsIgnoreCase(token)) {
-                                animatedLayers[idx] = true;
-                                any = true;
+                            if (layerNames[idx].equalsIgnoreCase(parts[1])) {
+                                setActiveLayer(idx);
                                 break;
                             }
                         }
                     }
-                    if (!any) {
-                        console.setStatus("Usage: animate [L1 L2 ... | layerName...]");
-                        break;
-                    }
-                    console.setStatus("Animating layers: " + animatedLayersStatus());
                 }
                 if (!timeline.isVisible()) {
                     timeline.setVisible(true);
-                    if (frames.isEmpty()) {
-                        addFrameFromCurrent();
-                    }
-                    console.setStatus("Animation panel opened. Frames: " + frames.size());
                     southWrap.revalidate();
-                } else {
-                    console.setStatus("Animation panel already open");
                 }
+                console.setStatus("Animation panel open for " + getLayerName(activeLayer));
                 break;
             case "framerate":
                 if (parts.length < 2) {
@@ -532,7 +516,7 @@ public class PixelArtApp {
                 break;
             case "duplicate":
                 duplicateCurrentFrame();
-                console.setStatus("Duplicated frame " + (currentFrameIndex + 1));
+                console.setStatus("Duplicated frame " + (getCurrentFrameIndexForActiveLayer() + 1) + " on " + getLayerName(activeLayer));
                 break;
             case "background":
                 if (parts.length < 4) {
@@ -611,13 +595,14 @@ public class PixelArtApp {
     }
 
     private BufferedImage toImage(Color[][][] layerData) {
-        int rows = layerData[0].length;
-        int cols = layerData[0][0].length;
+        int rows = canvas.getRows();
+        int cols = canvas.getColumns();
         BufferedImage img = new BufferedImage(cols, rows, BufferedImage.TYPE_INT_ARGB);
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 Color color = null;
                 for (int l = layerData.length - 1; l >= 0; l--) {
+                    if (layerData[l] == null) continue;
                     Color cc = layerData[l][r][c];
                     if (cc != null) { color = cc; break; }
                 }
@@ -632,7 +617,15 @@ public class PixelArtApp {
     }
 
     private void saveSequence(String basePath) throws IOException {
-        if (frames.isEmpty()) {
+        ensureFrameCapacity();
+        int layerCount = canvas.getLayerCount();
+        int maxFrames = 0;
+        for (List<FrameData> lf : layerFrames) {
+            if (lf != null) {
+                maxFrames = Math.max(maxFrames, lf.size());
+            }
+        }
+        if (maxFrames <= 0) {
             console.setStatus("No frames to save");
             return;
         }
@@ -651,25 +644,22 @@ public class PixelArtApp {
         if (!outDir.exists() && !outDir.mkdirs()) {
             throw new IOException("Could not create directory " + outDir.getAbsolutePath());
         }
-        saveCurrentFrame();
-        int digits = Math.max(3, String.valueOf(frames.size()).length());
-        for (int i = 0; i < frames.size(); i++) {
-            FrameData fd = frames.get(i);
-            Color[][][] apply = fd.layers;
-            // compose animated layers over current static layers
-            Color[][][] snapshot = canvas.getLayersCopy();
-            for (int l = 0; l < apply.length; l++) {
-                if (apply[l] != null) {
-                    snapshot[l] = apply[l];
-                }
+        saveCurrentFrames();
+        int digits = Math.max(3, String.valueOf(maxFrames).length());
+        for (int i = 0; i < maxFrames; i++) {
+            Color[][][] snapshot = new Color[layerCount][][];
+            for (int l = 0; l < layerCount; l++) {
+                List<FrameData> lf = layerFrames[l];
+                if (lf.isEmpty()) continue;
+                FrameData fd = lf.get(i % lf.size());
+                snapshot[l] = fd.layer;
             }
             BufferedImage img = toImage(snapshot);
             String idx = String.format("%0" + digits + "d", i + 1);
             String outName = new File(outDir, prefixFileName(dirName, idx, format)).getPath();
             ImageIO.write(img, format, new File(outName));
         }
-        // re-apply current frame to restore canvas state
-        applyFrame(frames.get(currentFrameIndex));
+        applyAllCurrentFrames();
     }
 
     private String prefixFileName(String base, String idx, String format) {
@@ -699,8 +689,8 @@ public class PixelArtApp {
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
 
-        ensureAnimatedLayersSize(newCanvas.getLayerCount());
         ensureLayerNamesSize(newCanvas.getLayerCount());
+        initLayerFrames(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
         if (controlBar != null) controlBar.syncSliders();
     }
@@ -858,10 +848,15 @@ public class PixelArtApp {
     void setToolMode(ToolMode mode) { toolMode = mode; }
     PixelCanvas getCanvas() { return canvas; }
     int getActiveLayer() { return activeLayer; }
-    void setActiveLayer(int layer) { activeLayer = Math.max(0, Math.min(2, layer)); }
-    boolean isLayerVisible(int layer) { return layerVisible[Math.max(0, Math.min(2, layer))]; }
+    void setActiveLayer(int layer) {
+        ensureFrameCapacity();
+        int max = canvas != null ? canvas.getLayerCount() - 1 : 2;
+        activeLayer = Math.max(0, Math.min(max, layer));
+        if (timeline != null) timeline.repaint();
+    }
+    boolean isLayerVisible(int layer) { return layerVisible[Math.max(0, Math.min(layerVisible.length - 1, layer))]; }
     void toggleLayerVisibility(int layer) {
-        int idx = Math.max(0, Math.min(2, layer));
+        int idx = Math.max(0, Math.min(layerVisible.length - 1, layer));
         layerVisible[idx] = !layerVisible[idx];
         if (canvas != null) {
             canvas.repaint();
@@ -871,11 +866,15 @@ public class PixelArtApp {
     void toggleOnion() { onionEnabled = !onionEnabled; }
 
     // Animation helpers
-    List<FrameData> getFrames() { return frames; }
-    int getCurrentFrameIndex() { return currentFrameIndex; }
+    List<FrameData> getFramesForActiveLayer() { ensureFrameCapacity(); return layerFrames[activeLayer]; }
+    int getCurrentFrameIndexForActiveLayer() { ensureFrameCapacity(); return currentFrameIndex[activeLayer]; }
     boolean isPlaying() { return playing; }
-    boolean isLayerAnimated(int layer) { return animatedLayers[Math.max(0, Math.min(animatedLayers.length - 1, layer))]; }
+    boolean isLayerAnimated(int layer) {
+        ensureFrameCapacity();
+        return animatedLayers[Math.max(0, Math.min(animatedLayers.length - 1, layer))];
+    }
     void toggleAnimatedLayer(int layer) {
+        ensureFrameCapacity();
         int idx = Math.max(0, Math.min(animatedLayers.length - 1, layer));
         animatedLayers[idx] = !animatedLayers[idx];
         if (timeline != null) timeline.repaint();
@@ -889,23 +888,26 @@ public class PixelArtApp {
         layerNames[i] = name;
     }
 
+    private Integer parseLayerToken(String token) {
+        if (token == null) return null;
+        String lower = token.toLowerCase();
+        if (lower.startsWith("l")) {
+            try {
+                int idx = Integer.parseInt(lower.substring(1)) - 1;
+                if (idx >= 0 && idx < canvas.getLayerCount()) {
+                    return idx;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
+    }
+
     void setFrameRate(int fps) {
         frameRate = Math.max(1, fps);
         if (playTimer != null) {
             playTimer.setDelay(delayFromFPS());
             playTimer.setInitialDelay(0);
-        }
-    }
-
-    private void ensureAnimatedLayersSize(int count) {
-        if (animatedLayers.length == count) return;
-        boolean[] prev = animatedLayers;
-        animatedLayers = new boolean[count];
-        for (int i = 0; i < Math.min(count, prev.length); i++) {
-            animatedLayers[i] = prev[i];
-        }
-        if (count > prev.length && prev.length == 0) {
-            animatedLayers[0] = true;
         }
     }
 
@@ -922,66 +924,111 @@ public class PixelArtApp {
         }
     }
 
+    private void initLayerFrames(int count) {
+        if (count <= 0) count = 1;
+        layerFrames = new ArrayList[count];
+        currentFrameIndex = new int[count];
+        animatedLayers = new boolean[count];
+        for (int i = 0; i < count; i++) {
+            layerFrames[i] = new ArrayList<>();
+            layerFrames[i].add(createEmptyFrameForLayer(i));
+            currentFrameIndex[i] = 0;
+            animatedLayers[i] = true;
+        }
+    }
+
+    private void ensureFrameCapacity() {
+        int expected = canvas != null ? canvas.getLayerCount() : (layerFrames == null ? 0 : layerFrames.length);
+        if (layerFrames == null || layerFrames.length != expected) {
+            initLayerFrames(expected);
+        }
+    }
+
     void addFrameFromCurrent() {
-        saveCurrentFrame();
-        FrameData data = captureFrame();
+        ensureFrameCapacity();
+        saveCurrentFrames();
+        int layer = activeLayer;
+        FrameData data = captureFrameForLayer(layer);
+        List<FrameData> frames = layerFrames[layer];
         frames.add(data);
-        currentFrameIndex = frames.size() - 1;
+        currentFrameIndex[layer] = frames.size() - 1;
+        applyFrameForLayer(layer, data);
         if (timeline != null) timeline.repaint();
     }
 
     void addBlankFrame() {
-        saveCurrentFrame();
-        FrameData data = createEmptyFrame();
-        int insertAt = Math.min(frames.size(), currentFrameIndex + 1);
+        ensureFrameCapacity();
+        saveCurrentFrames();
+        int layer = activeLayer;
+        List<FrameData> frames = layerFrames[layer];
+        int insertAt = Math.min(frames.size(), currentFrameIndex[layer] + 1);
+        FrameData data = createEmptyFrameForLayer(layer);
         frames.add(insertAt, data);
-        currentFrameIndex = insertAt;
-        applyFrame(data);
+        currentFrameIndex[layer] = insertAt;
+        applyFrameForLayer(layer, data);
         if (timeline != null) timeline.repaint();
     }
 
     void duplicateCurrentFrame() {
+        ensureFrameCapacity();
+        int layer = activeLayer;
+        List<FrameData> frames = layerFrames[layer];
         if (frames.isEmpty()) {
             addBlankFrame();
             return;
         }
-        saveCurrentFrame();
-        FrameData data = captureFrame();
-        int insertAt = Math.min(frames.size(), currentFrameIndex + 1);
-        frames.add(insertAt, data);
-        currentFrameIndex = insertAt;
-        applyFrame(data);
+        saveCurrentFrames();
+        FrameData snapshot = captureFrameForLayer(layer);
+        int insertAt = Math.min(frames.size(), currentFrameIndex[layer] + 1);
+        frames.add(insertAt, snapshot);
+        currentFrameIndex[layer] = insertAt;
+        applyFrameForLayer(layer, snapshot);
         if (timeline != null) timeline.repaint();
     }
 
     void deleteCurrentFrame() {
+        ensureFrameCapacity();
+        int layer = activeLayer;
+        List<FrameData> frames = layerFrames[layer];
         if (frames.isEmpty()) return;
-        frames.remove(currentFrameIndex);
+        frames.remove(currentFrameIndex[layer]);
         if (frames.isEmpty()) {
-            currentFrameIndex = 0;
-            FrameData data = createEmptyFrame();
-            frames.add(data);
-            applyFrame(data);
+            FrameData blank = createEmptyFrameForLayer(layer);
+            frames.add(blank);
+            currentFrameIndex[layer] = 0;
+            applyFrameForLayer(layer, blank);
         } else {
-            currentFrameIndex = Math.max(0, Math.min(currentFrameIndex, frames.size() - 1));
-            applyFrame(frames.get(currentFrameIndex));
+            currentFrameIndex[layer] = Math.max(0, Math.min(currentFrameIndex[layer], frames.size() - 1));
+            applyFrameForLayer(layer, frames.get(currentFrameIndex[layer]));
         }
         if (timeline != null) timeline.repaint();
     }
 
     void selectFrame(int index) {
+        ensureFrameCapacity();
+        int layer = activeLayer;
+        List<FrameData> frames = layerFrames[layer];
         if (index < 0 || index >= frames.size()) return;
-        saveCurrentFrame();
-        currentFrameIndex = index;
-        applyFrame(frames.get(index));
+        saveCurrentFrames();
+        currentFrameIndex[layer] = index;
+        syncOtherLayersToActive(index);
+        applyAllCurrentFrames();
         if (timeline != null) timeline.repaint();
     }
 
     void togglePlayback() {
-        if (frames.isEmpty()) {
+        boolean anyFrames = false;
+        for (List<FrameData> lf : layerFrames) {
+            if (lf != null && lf.size() > 1) {
+                anyFrames = true;
+                break;
+            }
+        }
+        if (!anyFrames) {
             console.setStatus("No frames to play");
             return;
         }
+        syncOtherLayersToActive(currentFrameIndex[activeLayer]);
         playing = !playing;
         if (playing) {
             if (playTimer == null) {
@@ -996,43 +1043,52 @@ public class PixelArtApp {
     }
 
     private void advanceFrame() {
-        if (frames.isEmpty()) {
+        ensureFrameCapacity();
+        saveCurrentFrames();
+        List<FrameData> activeList = layerFrames[activeLayer];
+        if (activeList.isEmpty() || activeList.size() < 1) {
             playing = false;
             if (playTimer != null) playTimer.stop();
             return;
         }
-        saveCurrentFrame();
-        currentFrameIndex = (currentFrameIndex + 1) % frames.size();
-        applyFrame(frames.get(currentFrameIndex));
+        currentFrameIndex[activeLayer] = (currentFrameIndex[activeLayer] + 1) % activeList.size();
+        syncOtherLayersToActive(currentFrameIndex[activeLayer]);
+        applyAllCurrentFrames();
         if (timeline != null) timeline.repaint();
     }
 
-    private FrameData captureFrame() {
-        Color[][][] data = new Color[3][][];
-        for (int l = 0; l < data.length; l++) {
-            if (animatedLayers[l]) {
-                data[l] = canvas.getLayerCopy(l);
-            }
+    private void syncOtherLayersToActive(int activeIndex) {
+        for (int l = 0; l < layerFrames.length; l++) {
+            if (l == activeLayer) continue;
+            List<FrameData> lf = layerFrames[l];
+            if (lf == null || lf.isEmpty()) continue;
+            currentFrameIndex[l] = activeIndex % lf.size();
         }
-        return new FrameData(data);
     }
 
-    private void saveCurrentFrame() {
-        if (frames.isEmpty()) return;
-        frames.set(currentFrameIndex, captureFrame());
+    private FrameData captureFrameForLayer(int layer) {
+        return new FrameData(canvas.getLayerCopy(layer));
+    }
+
+    private void saveCurrentFrames() {
+        if (layerFrames == null || currentFrameIndex == null) return;
+        int layers = Math.min(canvas.getLayerCount(), layerFrames.length);
+        for (int l = 0; l < layers; l++) {
+            List<FrameData> frames = layerFrames[l];
+            if (frames.isEmpty()) continue;
+            int idx = Math.max(0, Math.min(currentFrameIndex[l], frames.size() - 1));
+            frames.set(idx, captureFrameForLayer(l));
+        }
     }
 
     private void resetAnimationState() {
         if (playTimer != null) playTimer.stop();
         playing = false;
         onionEnabled = false;
-        frames.clear();
-        currentFrameIndex = 0;
-        ensureAnimatedLayersSize(canvas != null ? canvas.getLayerCount() : 3);
+        initLayerFrames(canvas != null ? canvas.getLayerCount() : 3);
         if (layerNames == null) layerNames = new String[animatedLayers.length];
         ensureLayerNamesSize(animatedLayers.length);
-        Arrays.fill(animatedLayers, false);
-        if (animatedLayers.length > 0) animatedLayers[0] = true;
+        Arrays.fill(animatedLayers, true);
         if (timeline != null) {
             timeline.setVisible(false);
             timeline.repaint();
@@ -1040,76 +1096,62 @@ public class PixelArtApp {
         if (southWrap != null) southWrap.revalidate();
     }
 
-    private FrameData createEmptyFrame() {
+    private FrameData createEmptyFrameForLayer(int layer) {
         int rows = canvas.getRows();
         int cols = canvas.getColumns();
-        Color[][][] data = new Color[3][][];
-        for (int l = 0; l < data.length; l++) {
-            if (animatedLayers[l]) {
-                data[l] = new Color[rows][cols];
-            }
-        }
+        Color[][] data = new Color[rows][cols];
         return new FrameData(data);
     }
 
-    private void applyFrame(FrameData data) {
+    private void applyFrameForLayer(int layer, FrameData data) {
         if (data == null) return;
-        for (int l = 0; l < data.layers.length; l++) {
-            if (data.layers[l] != null) {
-                canvas.setLayer(l, data.layers[l]);
-            }
-        }
+        canvas.setLayer(layer, data.layer);
         if (controlBar != null) controlBar.repaint();
         canvas.repaint();
     }
 
+    private void applyAllCurrentFrames() {
+        for (int l = 0; l < layerFrames.length; l++) {
+            List<FrameData> frames = layerFrames[l];
+            if (frames.isEmpty()) continue;
+            int idx = Math.max(0, Math.min(currentFrameIndex[l], frames.size() - 1));
+            FrameData fd = frames.get(idx);
+            applyFrameForLayer(l, fd);
+        }
+    }
+
     Color[][][] getOnionComposite() {
-        if (!onionEnabled || frames.size() < 2 || currentFrameIndex >= frames.size()) return null;
-        int prevIdx = (currentFrameIndex - 1 + frames.size()) % frames.size();
-        int nextIdx = (currentFrameIndex + 1) % frames.size();
+        ensureFrameCapacity();
+        if (!onionEnabled) return null;
+        List<FrameData> frames = layerFrames[activeLayer];
+        if (frames.size() < 2) return null;
+        int idx = Math.max(0, Math.min(currentFrameIndex[activeLayer], frames.size() - 1));
+        int prevIdx = (idx - 1 + frames.size()) % frames.size();
+        int nextIdx = (idx + 1) % frames.size();
         FrameData prev = frames.get(prevIdx);
         FrameData next = frames.get(nextIdx);
         int rows = canvas.getRows();
         int cols = canvas.getColumns();
         Color[][] prevComposite = new Color[rows][cols];
         Color[][] nextComposite = new Color[rows][cols];
-        compositeFrame(prev, prevComposite);
-        compositeFrame(next, nextComposite);
+        compositeFrame(prev.layer, prevComposite);
+        compositeFrame(next.layer, nextComposite);
         return new Color[][][]{prevComposite, nextComposite};
     }
 
-    private Color pickVisible(FrameData fd, int r, int c) {
-        if (fd == null || fd.layers == null) return null;
-        for (int l = fd.layers.length - 1; l >= 0; l--) {
-            if (fd.layers[l] == null) continue;
-            if (!isLayerVisible(l)) continue;
-            Color cc = fd.layers[l][r][c];
-            if (cc != null) return cc;
-        }
-        return null;
-    }
-
-    private void compositeFrame(FrameData fd, Color[][] out) {
-        if (fd == null || out == null) return;
+    private void compositeFrame(Color[][] layerData, Color[][] out) {
+        if (layerData == null || out == null) return;
         int rows = out.length;
         int cols = out[0].length;
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
-                out[r][c] = pickVisible(fd, r, c);
+                out[r][c] = layerData[r][c];
             }
         }
     }
 
     private int delayFromFPS() {
         return (int) Math.max(1, Math.round(1000.0 / Math.max(1, frameRate)));
-    }
-
-    private String animatedLayersStatus() {
-        List<String> parts = new ArrayList<>();
-        for (int i = 0; i < animatedLayers.length; i++) {
-            if (animatedLayers[i]) parts.add(layerNames[Math.min(i, layerNames.length - 1)]);
-        }
-        return String.join(",", parts);
     }
 
     private void installPanKeys(JFrame frame) {
@@ -1159,9 +1201,9 @@ public class PixelArtApp {
     }
 
     static class FrameData {
-        final Color[][][] layers;
-        FrameData(Color[][][] layers) {
-            this.layers = layers;
+        final Color[][] layer;
+        FrameData(Color[][] layer) {
+            this.layer = layer;
         }
     }
 }

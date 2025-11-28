@@ -95,13 +95,13 @@ class AnimationPanel extends JComponent {
         int frameSize = 32;
         int frameGap = 8;
         frameRects.clear();
-        List<PixelArtApp.FrameData> frames = app.getFrames();
+        List<PixelArtApp.FrameData> frames = app.getFramesForActiveLayer();
         for (int i = 0; i < frames.size(); i++) {
             int x = framesStartX + i * (frameSize + frameGap);
             int y = padding;
             Rectangle r = new Rectangle(x, y, frameSize, frameSize);
             frameRects.add(r);
-            boolean active = (i == app.getCurrentFrameIndex());
+            boolean active = (i == app.getCurrentFrameIndexForActiveLayer());
             g2.setColor(active ? PixelArtApp.ACCENT : PixelArtApp.BUTTON_BG);
             g2.fillRect(r.x, r.y, r.width, r.height);
             g2.setColor(PixelArtApp.BUTTON_BORDER);
