@@ -30,6 +30,12 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import javax.imageio.ImageTypeSpecifier;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.metadata.IIOMetadataNode;
+import javax.imageio.stream.ImageOutputStream;
 
 public class PixelArtApp {
     enum ToolMode {BRUSH, STAMP, FILL, BLUR, MOVE, ERASER}
@@ -278,29 +284,43 @@ public class PixelArtApp {
     }
 
     private void resampleCanvas(int factor) {
-        resetAnimationState();
-        Color[][] old = canvas.getPixelsCopy();
+        if (factor <= 1) return;
+        ensureFrameCapacity();
+        saveCurrentFrames();
         int oldRows = canvas.getRows();
         int oldCols = canvas.getColumns();
         int newRows = oldRows * factor;
         int newCols = oldCols * factor;
-        gridSize = newRows;
+        gridSize = Math.max(newRows, newCols);
         canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
-        for (int r = 0; r < newRows; r++) {
-            int srcR = Math.min(oldRows - 1, r / factor);
-            for (int c = 0; c < newCols; c++) {
-                int srcC = Math.min(oldCols - 1, c / factor);
-                Color color = old[srcR][srcC];
-                newCanvas.setPixelDirect(r, c, color);
+
+        // Scale all stored frames per layer
+        List<List<FrameData>> scaledFrames = new ArrayList<>();
+        for (List<FrameData> lf : layerFrames) {
+            List<FrameData> dest = new ArrayList<>();
+            for (FrameData fd : lf) {
+                dest.add(new FrameData(scaleLayer(fd.layer, factor)));
             }
+            if (dest.isEmpty()) dest.add(new FrameData(new Color[newRows][newCols]));
+            scaledFrames.add(dest);
         }
-        newCanvas.setCurrentColor(currentBrushColor());
-        newCanvas.setBrushSize(brushSize);
+        // Rebuild canvas
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, scaledFrames.size(), this::isLayerVisible, null);
         this.canvas = newCanvas;
-        ensureLayerNamesSize(newCanvas.getLayerCount());
-        initLayerFrames(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
+        ensureLayerNamesSize(newCanvas.getLayerCount());
+
+        // Restore frame data
+        initLayerFrames(newCanvas.getLayerCount());
+        for (int l = 0; l < scaledFrames.size(); l++) {
+            layerFrames[l].clear();
+            layerFrames[l].addAll(scaledFrames.get(l));
+            currentFrameIndex[l] = Math.min(currentFrameIndex[l], layerFrames[l].size() - 1);
+        }
+        applyAllCurrentFrames();
+        canvas.setCurrentColor(currentBrushColor());
+        canvas.setBrushSize(brushSize);
+        canvasHolder.recenter();
         if (controlBar != null) controlBar.syncSliders();
     }
 
@@ -358,6 +378,18 @@ public class PixelArtApp {
                     console.setStatus("Project saved to " + parts[1]);
                 } catch (IOException ex) {
                     console.setStatus("Save-project failed: " + ex.getMessage());
+                }
+                break;
+            case "save-gif":
+                if (parts.length < 2) {
+                    console.setStatus("Usage: save-gif <file.gif>");
+                    return;
+                }
+                try {
+                    saveGif(parts[1]);
+                    console.setStatus("GIF saved to " + parts[1]);
+                } catch (IOException ex) {
+                    console.setStatus("Save-gif failed: " + ex.getMessage());
                 }
                 break;
             case "load-project":
@@ -444,7 +476,7 @@ public class PixelArtApp {
                 }
                 break;
             case "help":
-                console.setStatus("Commands: save <file.png> | save-sequence <base.png> | save-project <file> | load-project <file> | load <file.png> | resolution | new <size> | flip h|v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd|ordered | resample <factor> | calc <expr> | animate [layer] | framerate <fps> | duplicate | rename L# <name> | exit");
+                console.setStatus("Commands: save <file.png> | save-sequence <base.png> | save-gif <file.gif> | save-project <file> | load-project <file> | load <file.png> | resolution | new <size> | flip h|v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd|ordered | resample <factor> | calc <expr> | animate [layer] | framerate <fps> | duplicate | rename L# <name> | exit");
                 break;
             case "blur":
                 if (parts.length < 3) {
@@ -646,6 +678,56 @@ public class PixelArtApp {
         return img;
     }
 
+    private void writeGif(List<BufferedImage> framesOut, int delayCs, String path) throws IOException {
+        ImageWriter writer = ImageIO.getImageWritersBySuffix("gif").hasNext() ? ImageIO.getImageWritersBySuffix("gif").next() : null;
+        if (writer == null) throw new IOException("No GIF writer available");
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(new File(path))) {
+            writer.setOutput(ios);
+            writer.prepareWriteSequence(null);
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            for (int i = 0; i < framesOut.size(); i++) {
+                BufferedImage bi = framesOut.get(i);
+                ImageTypeSpecifier type = ImageTypeSpecifier.createFromBufferedImageType(BufferedImage.TYPE_INT_ARGB);
+                IIOMetadata metadata = writer.getDefaultImageMetadata(type, param);
+                String metaFormat = metadata.getNativeMetadataFormatName();
+                IIOMetadataNode root = (IIOMetadataNode) metadata.getAsTree(metaFormat);
+                IIOMetadataNode gce = getNode(root, "GraphicControlExtension");
+                gce.setAttribute("disposalMethod", "restoreToBackgroundColor");
+                gce.setAttribute("userInputFlag", "FALSE");
+                gce.setAttribute("transparentColorFlag", "FALSE");
+                gce.setAttribute("delayTime", Integer.toString(delayCs));
+                gce.setAttribute("transparentColorIndex", "0");
+
+                if (i == 0) {
+                    IIOMetadataNode aes = getNode(root, "ApplicationExtensions");
+                    IIOMetadataNode ae = new IIOMetadataNode("ApplicationExtension");
+                    ae.setAttribute("applicationID", "NETSCAPE");
+                    ae.setAttribute("authenticationCode", "2.0");
+                    byte[] loop = new byte[]{1, 0, 0};
+                    ae.setUserObject(loop);
+                    aes.appendChild(ae);
+                }
+
+                metadata.setFromTree(metaFormat, root);
+                writer.writeToSequence(new javax.imageio.IIOImage(bi, null, metadata), param);
+            }
+            writer.endWriteSequence();
+        } finally {
+            writer.dispose();
+        }
+    }
+
+    private IIOMetadataNode getNode(IIOMetadataNode rootNode, String nodeName) {
+        for (int i = 0; i < rootNode.getLength(); i++) {
+            if (rootNode.item(i).getNodeName().equalsIgnoreCase(nodeName)) {
+                return (IIOMetadataNode) rootNode.item(i);
+            }
+        }
+        IIOMetadataNode node = new IIOMetadataNode(nodeName);
+        rootNode.appendChild(node);
+        return node;
+    }
+
     private void saveSequence(String basePath) throws IOException {
         ensureFrameCapacity();
         int layerCount = canvas.getLayerCount();
@@ -689,6 +771,37 @@ public class PixelArtApp {
             String outName = new File(outDir, prefixFileName(dirName, idx, format)).getPath();
             ImageIO.write(img, format, new File(outName));
         }
+        applyAllCurrentFrames();
+    }
+
+    private void saveGif(String path) throws IOException {
+        ensureFrameCapacity();
+        int layerCount = canvas.getLayerCount();
+        int lcm = 1;
+        for (List<FrameData> lf : layerFrames) {
+            int len = lf.size();
+            if (len > 0) {
+                lcm = lcm(lcm, len);
+            }
+        }
+        if (lcm <= 0) {
+            console.setStatus("No frames to save");
+            return;
+        }
+        saveCurrentFrames();
+        int delayCs = Math.max(1, (int) Math.round(100.0 / Math.max(1, frameRate))); // hundredths of a second
+        List<BufferedImage> framesOut = new ArrayList<>();
+        for (int i = 0; i < lcm; i++) {
+            Color[][][] snapshot = new Color[layerCount][][];
+            for (int l = 0; l < layerCount; l++) {
+                List<FrameData> lf = layerFrames[l];
+                if (lf.isEmpty()) continue;
+                FrameData fd = lf.get(i % lf.size());
+                snapshot[l] = fd.layer;
+            }
+            framesOut.add(toImage(snapshot));
+        }
+        writeGif(framesOut, delayCs, path);
         applyAllCurrentFrames();
     }
 
@@ -876,6 +989,20 @@ public class PixelArtApp {
         }
         if (vals.isEmpty()) throw new IllegalArgumentException("Missing operands");
         return applyOp(op, vals);
+    }
+
+    private long gcd(long a, long b) {
+        while (b != 0) {
+            long t = b;
+            b = a % b;
+            a = t;
+        }
+        return Math.max(1, a);
+    }
+
+    private int lcm(int a, int b) {
+        long g = gcd(a, b);
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1, (a / g) * (long) b));
     }
 
     private double parseAny(java.util.ArrayDeque<String> tokens) {
@@ -1294,6 +1421,23 @@ public class PixelArtApp {
             copy[r] = Arrays.copyOf(src[r], src[r].length);
         }
         return copy;
+    }
+
+    private Color[][] scaleLayer(Color[][] src, int factor) {
+        if (src == null) return null;
+        int oldRows = src.length;
+        int oldCols = src[0].length;
+        int newRows = oldRows * factor;
+        int newCols = oldCols * factor;
+        Color[][] out = new Color[newRows][newCols];
+        for (int r = 0; r < newRows; r++) {
+            int srcR = Math.min(oldRows - 1, r / factor);
+            for (int c = 0; c < newCols; c++) {
+                int srcC = Math.min(oldCols - 1, c / factor);
+                out[r][c] = src[srcR][srcC];
+            }
+        }
+        return out;
     }
 
     private <T> void swapArray(T[] arr, int i, int j) {
