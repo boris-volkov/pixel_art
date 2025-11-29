@@ -90,40 +90,47 @@ class TopBar extends JComponent {
 
     private Color[] buildPalette() {
         Color base = app.currentBrushColor();
-        Color comp = new Color(255 - base.getRed(), 255 - base.getGreen(), 255 - base.getBlue());
-
         float[] hsb = Color.RGBtoHSB(base.getRed(), base.getGreen(), base.getBlue(), null);
-        float h1 = (hsb[0] + 1f / 3f) % 1f;
-        float h2 = (hsb[0] + 2f / 3f) % 1f;
-        Color triad1 = Color.getHSBColor(h1, hsb[1], hsb[2]);
-        Color triad2 = Color.getHSBColor(h2, hsb[1], hsb[2]);
+        float h = hsb[0];
+        float s = hsb[1];
+        float v = hsb[2];
 
-        float baseSat = hsb[1];
-        float mutedSat = clampSat(baseSat * 0.25f);
-        float boostSat = clampSat(Math.max(baseSat, 1f - baseSat));
+        // Hue offsets
+        float analog = 0.07f; // ~25°
+        float split = 0.08f;  // ~30° around complement
 
-        Color compMuted = setSaturation(comp, mutedSat);
-        Color triad1Muted = setSaturation(triad1, mutedSat);
-        Color triad2Muted = setSaturation(triad2, mutedSat);
+        // Base band (mid row): analogous trio at medium intensity
+        Color midLeft = Color.getHSBColor(wrap(h - analog), s, v);
+        Color midMid = Color.getHSBColor(h, s, v);
+        Color midRight = Color.getHSBColor(wrap(h + analog), s, v);
 
-        Color compBoost = setSaturation(comp, boostSat);
-        Color triad1Boost = setSaturation(triad1, boostSat);
-        Color triad2Boost = setSaturation(triad2, boostSat);
+        // Shadows / muted (bottom row): cooler, lower sat/value neutrals
+        float shadowSat = clamp01(s * 0.35f);
+        float shadowVal = clamp01(v * 0.65f);
+        Color botLeft = Color.getHSBColor(wrap(h - analog - 0.03f), shadowSat, shadowVal);
+        Color botMid = Color.getHSBColor(h, shadowSat * 0.8f, shadowVal * 0.9f);
+        Color botRight = Color.getHSBColor(wrap(h + analog + 0.03f), shadowSat, shadowVal);
+
+        // Accents / highlights (top row): split complements and a bright highlight
+        float accentSat = clamp01(s * 0.85f + 0.15f);
+        float accentVal = clamp01(v * 0.2f + 0.8f);
+        Color topLeft = Color.getHSBColor(wrap(h + 0.5f - split), accentSat, accentVal);
+        Color topMid = Color.getHSBColor(wrap(h - 0.025f), clamp01(s * 0.7f + 0.2f), clamp01(Math.max(v, 0.85f)));
+        Color topRight = Color.getHSBColor(wrap(h + 0.5f + split), accentSat, accentVal);
 
         return new Color[]{
-                comp, triad1, triad2,
-                compMuted, triad1Muted, triad2Muted,
-                compBoost, triad1Boost, triad2Boost
+                midLeft, midMid, midRight,   // middle row
+                botLeft, botMid, botRight,   // bottom row
+                topLeft, topMid, topRight    // top row
         };
     }
 
-    private Color setSaturation(Color c, float sat) {
-        float[] hsb = Color.RGBtoHSB(c.getRed(), c.getGreen(), c.getBlue(), null);
-        float s = clampSat(sat);
-        return Color.getHSBColor(hsb[0], s, hsb[2]);
+    private float wrap(float hue) {
+        hue = hue % 1f;
+        return hue < 0f ? hue + 1f : hue;
     }
 
-    private float clampSat(float s) {
-        return Math.max(0f, Math.min(1f, s));
+    private float clamp01(float v) {
+        return Math.max(0f, Math.min(1f, v));
     }
 }

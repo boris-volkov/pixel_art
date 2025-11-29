@@ -86,6 +86,7 @@ public class PixelArtApp {
     private int canvasCellSize = computeMaxCellSizeForScreen();
     private ToolMode toolMode = ToolMode.BRUSH;
     private int activeLayer = 0;
+    private boolean stampUseOwnColors = true;
     private final boolean[] layerVisible = new boolean[]{true, true, true};
 
     public static void main(String[] args) {
@@ -99,9 +100,10 @@ public class PixelArtApp {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.getContentPane().setBackground(BG);
 
-        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
+        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false);
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
+        canvas.setStampUsesOwnColors(stampUseOwnColors);
         ensureLayerNamesSize(canvas.getLayerCount());
         initLayerFrames(canvas.getLayerCount());
 
@@ -109,7 +111,7 @@ public class PixelArtApp {
         stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> {
             ToolMode mode = getToolMode();
             return mode == ToolMode.ERASER ? ToolMode.ERASER : ToolMode.BRUSH;
-        }, null, null, () -> 0, 1, l -> true, null);
+        }, null, null, () -> 0, 1, l -> true, null, true);
         stampCanvas.setCurrentColor(currentBrushColor());
 
         canvasHolder = new CanvasViewport(canvas);
@@ -127,7 +129,7 @@ public class PixelArtApp {
         topRow.setOpaque(false);
         topRow.setLayout(new BoxLayout(topRow, BoxLayout.X_AXIS));
         topRow.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        StampPanel stampHolder = new StampPanel(stampCanvas);
+        StampPanel stampHolder = new StampPanel(stampCanvas, this);
         FocusWrap topWrapLeft = new FocusWrap(topBar);
         FocusWrap topWrapRight = new FocusWrap(stampHolder);
         topRow.add(topWrapLeft);
@@ -251,7 +253,7 @@ public class PixelArtApp {
         resetAnimationState();
         gridSize = Math.max(newCols, newRows);
         canvasCellSize = computeMaxCellSizeForScreen();
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false);
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
@@ -305,7 +307,7 @@ public class PixelArtApp {
             scaledFrames.add(dest);
         }
         // Rebuild canvas
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, scaledFrames.size(), this::isLayerVisible, null);
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, scaledFrames.size(), this::isLayerVisible, null, false);
         this.canvas = newCanvas;
         canvasHolder.setCanvas(newCanvas);
         ensureLayerNamesSize(newCanvas.getLayerCount());
@@ -842,7 +844,7 @@ public class PixelArtApp {
             ProjectData data = (ProjectData) ois.readObject();
             gridSize = Math.max(data.cols, data.rows);
             canvasCellSize = Math.min(MAX_CELL_SIZE, Math.max(2, data.cellSize));
-            PixelCanvas newCanvas = new PixelCanvas(data.cols, data.rows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, data.layerFrames.size(), this::isLayerVisible, null);
+            PixelCanvas newCanvas = new PixelCanvas(data.cols, data.rows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, data.layerFrames.size(), this::isLayerVisible, null, false);
             canvas = newCanvas;
             canvasHolder.setCanvas(newCanvas);
             viewportBg = data.viewportBg != null ? data.viewportBg : BG;
@@ -896,7 +898,7 @@ public class PixelArtApp {
         }
         gridSize = w;
         canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
-        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null);
+        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int argb = img.getRGB(x, y);
@@ -1134,6 +1136,12 @@ public class PixelArtApp {
     void setLayerName(int idx, String name) {
         int i = Math.max(0, Math.min(layerNames.length - 1, idx));
         layerNames[i] = name;
+    }
+
+    boolean isStampUsingOwnColors() { return stampUseOwnColors; }
+    void setStampUseOwnColors(boolean own) {
+        stampUseOwnColors = own;
+        if (canvas != null) canvas.setStampUsesOwnColors(own);
     }
 
     private Integer parseLayerToken(String token) {

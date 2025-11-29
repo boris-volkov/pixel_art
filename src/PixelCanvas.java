@@ -34,10 +34,12 @@ class PixelCanvas extends javax.swing.JPanel {
     private final IntSupplier activeLayerSupplier;
     private final IntPredicate layerVisiblePredicate;
     private final java.util.function.BooleanSupplier panBlocker;
+    private final boolean stampSurface;
     private Color currentColor = Color.BLACK;
     private int brushSize = 1;
     private int hoverCol = -1;
     private int hoverRow = -1;
+    private boolean stampPristine = false;
     private boolean strokeActive = false;
     private boolean constrainStroke = false;
     private int anchorCol = -1;
@@ -45,12 +47,14 @@ class PixelCanvas extends javax.swing.JPanel {
     private Color[][] moveSnapshot = null;
     private int moveStartCol = 0;
     private int moveStartRow = 0;
+    private boolean stampUsesOwnColors = true;
 
     PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback,
                 IntConsumer brushChangeCallback, Supplier<PixelArtApp.ToolMode> modeSupplier,
                 Supplier<Color[][]> stampSupplier, Supplier<Color[][][]> onionSupplier,
                 IntSupplier activeLayerSupplier, int layerCount,
-                IntPredicate layerVisiblePredicate, java.util.function.BooleanSupplier panBlocker) {
+                IntPredicate layerVisiblePredicate, java.util.function.BooleanSupplier panBlocker,
+                boolean stampSurface) {
         this.columns = columns;
         this.rows = rows;
         this.cellSize = cellSize;
@@ -64,6 +68,8 @@ class PixelCanvas extends javax.swing.JPanel {
         this.activeLayerSupplier = activeLayerSupplier;
         this.layerVisiblePredicate = layerVisiblePredicate != null ? layerVisiblePredicate : (l -> true);
         this.panBlocker = panBlocker;
+        this.stampSurface = stampSurface;
+        this.stampPristine = stampSurface;
         setPreferredSize(new Dimension(columns * cellSize, rows * cellSize));
         setOpaque(false);
         setBackground(new Color(0, 0, 0, 0));
@@ -86,6 +92,11 @@ class PixelCanvas extends javax.swing.JPanel {
     Color getCurrentColor() {
         return currentColor;
     }
+    void setStampUsesOwnColors(boolean value) {
+        this.stampUsesOwnColors = value;
+        repaint();
+    }
+    boolean isStampUsingOwnColors() { return stampUsesOwnColors; }
 
     int getBrushSize() {
         return brushSize;
@@ -123,6 +134,9 @@ class PixelCanvas extends javax.swing.JPanel {
             for (int c = 0; c < columns; c++) {
                 layers[layer][r][c] = null;
             }
+        }
+        if (stampSurface) {
+            stampPristine = true;
         }
         repaint();
     }
@@ -402,6 +416,13 @@ class PixelCanvas extends javax.swing.JPanel {
             pushUndo();
             strokeActive = true;
         }
+        if (stampSurface && stampPristine) {
+            // clear any lingering data and mark as used
+            for (int r = 0; r < rows; r++) {
+                Arrays.fill(layers[0][r], null);
+            }
+            stampPristine = false;
+        }
         applyBrush(column, row, mode);
         updateHover(column * cellSize, row * cellSize);
     }
@@ -481,7 +502,7 @@ class PixelCanvas extends javax.swing.JPanel {
                     for (int c = 0; c < scale; c++) {
                         int cc = destCol + c;
                         if (cc < 0 || cc >= columns) continue;
-                        layers[layer][rr][cc] = s;
+                        layers[layer][rr][cc] = stampUsesOwnColors ? s : currentColor;
                     }
                 }
             }
@@ -681,6 +702,19 @@ class PixelCanvas extends javax.swing.JPanel {
         // Outline canvas bounds
         g2.setColor(PixelArtApp.BUTTON_BORDER);
         g2.drawRect(0, 0, columns * cellSize - 1, rows * cellSize - 1);
+
+        // Stamp hint overlay
+        if (stampSurface && stampPristine) {
+            g2.setColor(new Color(PixelArtApp.TEXT.getRed(), PixelArtApp.TEXT.getGreen(), PixelArtApp.TEXT.getBlue(), 160));
+            String[] lines = {"DRAW", "STAMP", "HERE"};
+            int lineHeight = 10 * 2; // approx using scale 2
+            int totalHeight = lines.length * lineHeight;
+            int startY = (rows * cellSize - totalHeight) / 2;
+            for (int i = 0; i < lines.length; i++) {
+                Rectangle r = new Rectangle(0, startY + i * lineHeight, columns * cellSize, lineHeight);
+                PixelFont.drawCentered(g2, lines[i], r, 2, g2.getColor());
+            }
+        }
 
         g2.dispose();
     }
