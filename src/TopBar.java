@@ -23,7 +23,7 @@ class TopBar extends JComponent {
                 for (int i = 0; i < swatchRects.length; i++) {
                     Rectangle r = swatchRects[i];
                     if (r != null && r.contains(e.getPoint())) {
-                        app.setBrushColor(palette[i]);
+                        app.pickBrushColor(palette[i]);
                         repaint();
                         break;
                     }

@@ -58,7 +58,7 @@ public class PixelArtApp {
     static final int BRUSH_BRIGHT_STEP = 1;
     static final int TARGET_CANVAS_SIZE = 640;
     static final int MIN_CELL_SIZE = 2;
-    static final int MAX_CELL_SIZE = 20;
+    static final int MAX_CELL_SIZE = 256;
 
     private PixelCanvas canvas;
     private PixelCanvas stampCanvas;
@@ -88,6 +88,9 @@ public class PixelArtApp {
     private int activeLayer = 0;
     private boolean stampUseOwnColors = true;
     private final boolean[] layerVisible = new boolean[]{true, true, true};
+    private enum CanvasTarget {MAIN, STAMP}
+    private final java.util.Deque<CanvasTarget> undoOrder = new java.util.ArrayDeque<>();
+    private final java.util.Deque<CanvasTarget> redoOrder = new java.util.ArrayDeque<>();
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -100,7 +103,7 @@ public class PixelArtApp {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.getContentPane().setBackground(BG);
 
-        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false);
+        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
         canvas.setStampUsesOwnColors(stampUseOwnColors);
@@ -108,10 +111,10 @@ public class PixelArtApp {
         initLayerFrames(canvas.getLayerCount());
 
         int stampCellSize = 10;
-        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::setBrushColor, this::setBrushSize, () -> {
+        stampCanvas = new PixelCanvas(16, 16, stampCellSize, this::pickBrushColor, this::setBrushSize, () -> {
             ToolMode mode = getToolMode();
             return mode == ToolMode.ERASER ? ToolMode.ERASER : ToolMode.BRUSH;
-        }, null, null, () -> 0, 1, l -> true, null, true);
+        }, null, null, () -> 0, 1, l -> true, null, true, () -> recordUndo(CanvasTarget.STAMP));
         stampCanvas.setCurrentColor(currentBrushColor());
 
         canvasHolder = new CanvasViewport(canvas);
@@ -160,8 +163,15 @@ public class PixelArtApp {
         frame.getRootPane().getActionMap().put("undo", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                canvas.undo();
-                controlBar.syncSliders();
+                performUndo();
+            }
+        });
+        frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke("control X"), "redo");
+        frame.getRootPane().getActionMap().put("redo", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                performRedo();
             }
         });
         installConsoleToggle(frame);
@@ -229,6 +239,14 @@ public class PixelArtApp {
         }
     }
 
+    void pickBrushColor(Color color) {
+        setBrushColor(color);
+        if (toolMode != ToolMode.STAMP && toolMode != ToolMode.FILL) {
+            setToolMode(ToolMode.BRUSH);
+            if (controlBar != null) controlBar.repaint();
+        }
+    }
+
     void setBrushColor(Color color) {
         if (color == null) return;
         red = clamp(color.getRed());
@@ -253,7 +271,7 @@ public class PixelArtApp {
         resetAnimationState();
         gridSize = Math.max(newCols, newRows);
         canvasCellSize = computeMaxCellSizeForScreen();
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false);
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
@@ -261,6 +279,7 @@ public class PixelArtApp {
         initLayerFrames(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
         canvasHolder.recenter();
+        setCanvasCellSize(computeMaxCellSizeForScreen());
     }
 
     void adjustBrushBrightnessGlobal(int delta) {
@@ -272,8 +291,9 @@ public class PixelArtApp {
     }
 
     void setCanvasCellSize(int size) {
-        int cap = MAX_CELL_SIZE;
-        canvasCellSize = Math.max(2, Math.min(cap, size));
+        int fitCap = computeMaxCellSizeForScreen();
+        int hardCap = Math.max(fitCap, MAX_CELL_SIZE); // allow zoom beyond screen up to hard cap
+        canvasCellSize = Math.max(2, Math.min(hardCap, size));
         if (canvas != null) {
             canvas.setCellSize(canvasCellSize);
             canvasHolder.refreshLayout();
@@ -307,7 +327,7 @@ public class PixelArtApp {
             scaledFrames.add(dest);
         }
         // Rebuild canvas
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, scaledFrames.size(), this::isLayerVisible, null, false);
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, scaledFrames.size(), this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
         this.canvas = newCanvas;
         canvasHolder.setCanvas(newCanvas);
         ensureLayerNamesSize(newCanvas.getLayerCount());
@@ -323,6 +343,7 @@ public class PixelArtApp {
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
         canvasHolder.recenter();
+        setCanvasCellSize(computeMaxCellSizeForScreen());
         if (controlBar != null) controlBar.syncSliders();
     }
 
@@ -330,9 +351,50 @@ public class PixelArtApp {
         Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
         int usableWidth = (int) screen.getWidth() - CONTROL_BAR_WIDTH - 200;
         int usableHeight = (int) screen.getHeight() - 200;
-        int maxByWidth = Math.max(2, usableWidth / gridSize);
-        int maxByHeight = Math.max(2, usableHeight / gridSize);
+        int cols = canvas != null ? canvas.getColumns() : gridSize;
+        int rows = canvas != null ? canvas.getRows() : gridSize;
+        cols = Math.max(1, cols);
+        rows = Math.max(1, rows);
+        int maxByWidth = Math.max(2, usableWidth / cols);
+        int maxByHeight = Math.max(2, usableHeight / rows);
         return Math.min(maxByWidth, maxByHeight);
+    }
+
+    private void recordUndo(CanvasTarget target) {
+        undoOrder.push(target);
+        redoOrder.clear();
+    }
+
+    private void performUndo() {
+        if (undoOrder.isEmpty()) return;
+        CanvasTarget target = undoOrder.pop();
+        switch (target) {
+            case MAIN -> canvas.undo();
+            case STAMP -> {
+                if (stampCanvas != null) stampCanvas.undo();
+            }
+        }
+        redoOrder.push(target);
+        if (controlBar != null) controlBar.syncSliders();
+    }
+
+    private void performRedo() {
+        if (redoOrder.isEmpty()) return;
+        CanvasTarget target = redoOrder.pop();
+        switch (target) {
+            case MAIN -> canvas.redo();
+            case STAMP -> {
+                if (stampCanvas != null) stampCanvas.redo();
+            }
+        }
+        undoOrder.push(target);
+        if (controlBar != null) controlBar.syncSliders();
+    }
+
+    private void autoBrushIfColorControl() {
+        if (toolMode == ToolMode.STAMP || toolMode == ToolMode.FILL) return;
+        setToolMode(ToolMode.BRUSH);
+        if (controlBar != null) controlBar.repaint();
     }
 
     PixelCanvas getStampCanvas() {
@@ -844,7 +906,7 @@ public class PixelArtApp {
             ProjectData data = (ProjectData) ois.readObject();
             gridSize = Math.max(data.cols, data.rows);
             canvasCellSize = Math.min(MAX_CELL_SIZE, Math.max(2, data.cellSize));
-            PixelCanvas newCanvas = new PixelCanvas(data.cols, data.rows, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, data.layerFrames.size(), this::isLayerVisible, null, false);
+            PixelCanvas newCanvas = new PixelCanvas(data.cols, data.rows, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, data.layerFrames.size(), this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
             canvas = newCanvas;
             canvasHolder.setCanvas(newCanvas);
             viewportBg = data.viewportBg != null ? data.viewportBg : BG;
@@ -898,7 +960,7 @@ public class PixelArtApp {
         }
         gridSize = w;
         canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
-        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::setBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false);
+        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int argb = img.getRGB(x, y);
@@ -913,6 +975,7 @@ public class PixelArtApp {
         ensureLayerNamesSize(newCanvas.getLayerCount());
         initLayerFrames(newCanvas.getLayerCount());
         canvasHolder.setCanvas(newCanvas);
+        setCanvasCellSize(computeMaxCellSizeForScreen());
         if (controlBar != null) controlBar.syncSliders();
     }
     static Color adjustChannel(Color color, int redDelta, int greenDelta, int blueDelta) {
@@ -1054,9 +1117,13 @@ public class PixelArtApp {
     int getRed() { return red; }
     int getGreen() { return green; }
     int getBlue() { return blue; }
-    void setRed(int v) { red = clamp(v); updateBrushTargets(); if (controlBar != null) controlBar.syncSliders(); }
-    void setGreen(int v) { green = clamp(v); updateBrushTargets(); if (controlBar != null) controlBar.syncSliders(); }
-    void setBlue(int v) { blue = clamp(v); updateBrushTargets(); if (controlBar != null) controlBar.syncSliders(); }
+    void setRed(int v) { red = clamp(v); updateBrushTargets(); autoBrushIfColorControl(); if (controlBar != null) controlBar.syncSliders(); }
+    void setGreen(int v) { green = clamp(v); updateBrushTargets(); autoBrushIfColorControl(); if (controlBar != null) controlBar.syncSliders(); }
+    void setBlue(int v) { blue = clamp(v); updateBrushTargets(); autoBrushIfColorControl(); if (controlBar != null) controlBar.syncSliders(); }
+    int getHueDegrees() {
+        float[] hsb = Color.RGBtoHSB(red, green, blue, null);
+        return Math.round(hsb[0] * 360f) % 360;
+    }
     int getSaturationPercent() {
         float[] hsb = Color.RGBtoHSB(red, green, blue, null);
         return Math.round(hsb[1] * 100f);
@@ -1070,12 +1137,21 @@ public class PixelArtApp {
         float s = Math.max(0f, Math.min(1f, percent / 100f));
         Color c = Color.getHSBColor(hsb[0], s, hsb[2]);
         setBrushColor(c);
+        autoBrushIfColorControl();
     }
     void setBrightnessPercent(int percent) {
         float[] hsb = Color.RGBtoHSB(red, green, blue, null);
         float bVal = Math.max(0f, Math.min(1f, percent / 100f));
         Color c = Color.getHSBColor(hsb[0], hsb[1], bVal);
         setBrushColor(c);
+        autoBrushIfColorControl();
+    }
+    void setHueDegrees(int deg) {
+        float[] hsb = Color.RGBtoHSB(red, green, blue, null);
+        float h = ((deg % 360) + 360) % 360 / 360f;
+        Color c = Color.getHSBColor(h, hsb[1], hsb[2]);
+        setBrushColor(c);
+        autoBrushIfColorControl();
     }
     int getBrushSize() { return brushSize; }
     void setBrushSize(int size) { onBrushSizeChanged(size); if (canvas != null) canvas.setBrushSize(size); }
@@ -1113,7 +1189,10 @@ public class PixelArtApp {
         canvas.repaint();
     }
     boolean isOnionEnabled() { return onionEnabled; }
-    void toggleOnion() { onionEnabled = !onionEnabled; }
+    void toggleOnion() {
+        onionEnabled = !onionEnabled;
+        if (canvas != null) canvas.repaint();
+    }
 
     // Animation helpers
     List<FrameData> getFramesForActiveLayer() { ensureFrameCapacity(); return layerFrames[activeLayer]; }

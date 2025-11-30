@@ -25,6 +25,7 @@ class PixelCanvas extends javax.swing.JPanel {
     private int cellSize;
     private final Color[][][] layers;
     private final Deque<Color[][][]> undoStack = new ArrayDeque<>();
+    private final Deque<Color[][][]> redoStack = new ArrayDeque<>();
     private final int undoLimit = 30;
     private final java.util.function.Consumer<Color> pickCallback;
     private final IntConsumer brushChangeCallback;
@@ -34,6 +35,7 @@ class PixelCanvas extends javax.swing.JPanel {
     private final IntSupplier activeLayerSupplier;
     private final IntPredicate layerVisiblePredicate;
     private final java.util.function.BooleanSupplier panBlocker;
+    private final Runnable undoListener;
     private final boolean stampSurface;
     private Color currentColor = Color.BLACK;
     private int brushSize = 1;
@@ -54,7 +56,7 @@ class PixelCanvas extends javax.swing.JPanel {
                 Supplier<Color[][]> stampSupplier, Supplier<Color[][][]> onionSupplier,
                 IntSupplier activeLayerSupplier, int layerCount,
                 IntPredicate layerVisiblePredicate, java.util.function.BooleanSupplier panBlocker,
-                boolean stampSurface) {
+                boolean stampSurface, Runnable undoListener) {
         this.columns = columns;
         this.rows = rows;
         this.cellSize = cellSize;
@@ -69,6 +71,7 @@ class PixelCanvas extends javax.swing.JPanel {
         this.layerVisiblePredicate = layerVisiblePredicate != null ? layerVisiblePredicate : (l -> true);
         this.panBlocker = panBlocker;
         this.stampSurface = stampSurface;
+        this.undoListener = undoListener;
         this.stampPristine = stampSurface;
         setPreferredSize(new Dimension(columns * cellSize, rows * cellSize));
         setOpaque(false);
@@ -720,13 +723,27 @@ class PixelCanvas extends javax.swing.JPanel {
     }
 
     private Color compositeAt(int row, int col) {
-        for (int l = layerCount - 1; l >= 0; l--) {
-            if (layerVisiblePredicate.test(l)) {
-                Color c = layers[l][row][col];
-                if (c != null) return c;
-            }
+        double outA = 0;
+        double outR = 0, outG = 0, outB = 0;
+        for (int l = layerCount - 1; l >= 0; l--) { // topmost index last painted
+            if (!layerVisiblePredicate.test(l)) continue;
+            Color c = layers[l][row][col];
+            if (c == null) continue;
+            double a = c.getAlpha() / 255.0;
+            double contrib = a * (1.0 - outA);
+            if (contrib <= 0) continue;
+            outR += c.getRed() * contrib;
+            outG += c.getGreen() * contrib;
+            outB += c.getBlue() * contrib;
+            outA += contrib;
+            if (outA >= 0.999) break;
         }
-        return null;
+        if (outA <= 0) return null;
+        int alpha = PixelArtApp.clamp((int) Math.round(outA * 255.0));
+        int r = PixelArtApp.clamp((int) Math.round(outR / outA));
+        int g = PixelArtApp.clamp((int) Math.round(outG / outA));
+        int b = PixelArtApp.clamp((int) Math.round(outB / outA));
+        return new Color(r, g, b, alpha);
     }
 
     BufferedImage toImage() {
@@ -815,6 +832,8 @@ class PixelCanvas extends javax.swing.JPanel {
         if (undoStack.isEmpty()) {
             return;
         }
+        // Save current state to redo stack
+        pushRedoSnapshot();
         Color[][][] prev = undoStack.pop();
         moveSnapshot = null;
         for (int l = 0; l < layerCount; l++) {
@@ -825,7 +844,28 @@ class PixelCanvas extends javax.swing.JPanel {
         repaint();
     }
 
+    void redo() {
+        if (redoStack.isEmpty()) {
+            return;
+        }
+        pushUndoSnapshot();
+        Color[][][] next = redoStack.pop();
+        moveSnapshot = null;
+        for (int l = 0; l < layerCount; l++) {
+            for (int r = 0; r < rows; r++) {
+                System.arraycopy(next[l][r], 0, layers[l][r], 0, columns);
+            }
+        }
+        repaint();
+    }
+
     private void pushUndo() {
+        pushUndoSnapshot();
+        if (undoListener != null) undoListener.run();
+        redoStack.clear();
+    }
+
+    private void pushUndoSnapshot() {
         Color[][][] snapshot = new Color[layerCount][rows][columns];
         for (int l = 0; l < layerCount; l++) {
             for (int r = 0; r < rows; r++) {
@@ -835,6 +875,19 @@ class PixelCanvas extends javax.swing.JPanel {
         undoStack.push(snapshot);
         while (undoStack.size() > undoLimit) {
             undoStack.removeLast();
+        }
+    }
+
+    private void pushRedoSnapshot() {
+        Color[][][] snapshot = new Color[layerCount][rows][columns];
+        for (int l = 0; l < layerCount; l++) {
+            for (int r = 0; r < rows; r++) {
+                snapshot[l][r] = Arrays.copyOf(layers[l][r], columns);
+            }
+        }
+        redoStack.push(snapshot);
+        while (redoStack.size() > undoLimit) {
+            redoStack.removeLast();
         }
     }
 
@@ -893,7 +946,7 @@ class PixelCanvas extends javax.swing.JPanel {
         }
         for (int r = startRow; r <= endRow; r++) {
             for (int c = startCol; c <= endCol; c++) {
-                double accR = 0, accG = 0, accB = 0, wSum = 0;
+                double accR = 0, accG = 0, accB = 0, colorWeight = 0, totalWeight = 0;
                 for (int dy = -radius; dy <= radius; dy++) {
                     int rr = r + dy;
                     if (rr < 0 || rr >= rows) continue;
@@ -902,19 +955,27 @@ class PixelCanvas extends javax.swing.JPanel {
                         if (cc < 0 || cc >= columns) continue;
                         if (dx * dx + dy * dy > radius * radius) continue;
                         double w = Math.exp(-(dx * dx + dy * dy) / twoSigmaSq);
+                        totalWeight += w;
                         Color src = snapshot[rr][cc];
-                        if (src == null) continue; // skip transparent pixels
-                        accR += src.getRed() * w;
-                        accG += src.getGreen() * w;
-                        accB += src.getBlue() * w;
-                        wSum += w;
+                        if (src == null) continue; // skip transparent pixels for color, but still count toward totalWeight
+                        double alpha = src.getAlpha() / 255.0;
+                        double aw = w * alpha;
+                        accR += src.getRed() * aw;
+                        accG += src.getGreen() * aw;
+                        accB += src.getBlue() * aw;
+                        colorWeight += aw;
                     }
                 }
-                if (wSum > 0) {
-                    int nr = PixelArtApp.clamp((int) Math.round(accR / wSum));
-                    int ng = PixelArtApp.clamp((int) Math.round(accG / wSum));
-                    int nb = PixelArtApp.clamp((int) Math.round(accB / wSum));
-                    layers[layer][r][c] = new Color(nr, ng, nb);
+                if (colorWeight > 0 && totalWeight > 0) {
+                    int nr = PixelArtApp.clamp((int) Math.round(accR / colorWeight));
+                    int ng = PixelArtApp.clamp((int) Math.round(accG / colorWeight));
+                    int nb = PixelArtApp.clamp((int) Math.round(accB / colorWeight));
+                    int na = PixelArtApp.clamp((int) Math.round(255 * (colorWeight / totalWeight)));
+                    if (na == 0) {
+                        layers[layer][r][c] = null;
+                    } else {
+                        layers[layer][r][c] = new Color(nr, ng, nb, na);
+                    }
                 } else {
                     layers[layer][r][c] = null; // remains transparent if no color contributed
                 }

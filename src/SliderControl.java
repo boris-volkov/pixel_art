@@ -4,7 +4,7 @@ import java.util.function.IntConsumer;
 class SliderControl {
     final String label;
     final int min;
-    final int max;
+    int max;
     int value;
     final IntConsumer onChange;
     Rectangle track;
@@ -22,6 +22,13 @@ class SliderControl {
         this.plus = new ActionButton("+", () -> setValue(this.value + 1), false);
     }
 
+    void setMax(int newMax) {
+        this.max = Math.max(min + 1, newMax);
+        if (value > max) {
+            setValue(max);
+        }
+    }
+
     void setValue(int newValue) {
         int clamped = Math.max(min, Math.min(max, newValue));
         if (clamped != value) {
@@ -32,7 +39,14 @@ class SliderControl {
         }
     }
 
+    void setValueSilently(int newValue) {
+        int clamped = Math.max(min, Math.min(max, newValue));
+        value = clamped;
+    }
+
     double ratio() {
-        return (double) (value - min) / (double) (max - min);
+        int range = max - min;
+        if (range <= 0) return 0;
+        return (double) (value - min) / (double) range;
     }
 }

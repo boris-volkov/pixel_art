@@ -17,6 +17,7 @@ class ControlBar extends JComponent {
     private final SliderControl redSlider;
     private final SliderControl greenSlider;
     private final SliderControl blueSlider;
+    private final SliderControl hueSlider;
     private final SliderControl satSlider;
     private final SliderControl valSlider;
     private final SliderControl brushSlider;
@@ -49,6 +50,10 @@ class ControlBar extends JComponent {
             app.setBlue(v);
             repaint();
         });
+        hueSlider = new SliderControl("HUE", 0, 359, app.getHueDegrees(), v -> {
+            app.setHueDegrees(v);
+            repaint();
+        });
         satSlider = new SliderControl("SAT", 0, 100, app.getSaturationPercent(), v -> {
             app.setSaturationPercent(v);
             repaint();
@@ -61,8 +66,8 @@ class ControlBar extends JComponent {
             app.setBrushSize(v);
             repaint();
         });
-        int zoomCap = PixelArtApp.MAX_CELL_SIZE;
-        zoomSlider = new SliderControl("ZOOM", 2, Math.max(zoomCap, 2), app.getCanvasCellSize(), v -> {
+        int zoomCap = Math.max(2, Math.max(app.computeMaxCellSizeForScreen(), PixelArtApp.MAX_CELL_SIZE));
+        zoomSlider = new SliderControl("ZOOM", 2, zoomCap, app.getCanvasCellSize(), v -> {
             app.setCanvasCellSize(v);
             repaint();
         });
@@ -192,10 +197,14 @@ class ControlBar extends JComponent {
         redSlider.value = app.getRed();
         greenSlider.value = app.getGreen();
         blueSlider.value = app.getBlue();
+        hueSlider.value = app.getHueDegrees();
         satSlider.value = app.getSaturationPercent();
         valSlider.value = app.getBrightnessPercent();
         brushSlider.value = app.getBrushSize();
-        zoomSlider.value = app.getCanvasCellSize();
+        int newZoomMax = Math.max(2, app.computeMaxCellSizeForScreen());
+        int maxZoom = Math.max(newZoomMax, PixelArtApp.MAX_CELL_SIZE);
+        zoomSlider.setMax(maxZoom);
+        zoomSlider.setValueSilently(Math.min(maxZoom, app.getCanvasCellSize()));
         repaint();
     }
 
@@ -226,6 +235,7 @@ class ControlBar extends JComponent {
         y = drawSlider(g2, redSlider, padding, y, availableWidth);
         y = drawSlider(g2, greenSlider, padding, y, availableWidth);
         y = drawSlider(g2, blueSlider, padding, y, availableWidth);
+        y = drawSlider(g2, hueSlider, padding, y, availableWidth);
         y = drawSlider(g2, satSlider, padding, y, availableWidth);
         y = drawSlider(g2, valSlider, padding, y, availableWidth);
         y = drawSlider(g2, brushSlider, padding, y, availableWidth);
@@ -368,7 +378,7 @@ class ControlBar extends JComponent {
 
     private SliderControl findSlider(int x, int y) {
         for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider,
-                zoomSlider)) {
+                hueSlider, brushSlider, zoomSlider)) {
             if (s.track != null && s.track.contains(x, y)) {
                 return s;
             }
@@ -416,7 +426,7 @@ class ControlBar extends JComponent {
                 return ub;
             }
         }
-        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider,
+        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, hueSlider, satSlider, valSlider, brushSlider,
                 zoomSlider)) {
             for (ActionButton b : List.of(s.minus, s.plus)) {
                 if (b.bounds != null && b.bounds.contains(x, y)) {
