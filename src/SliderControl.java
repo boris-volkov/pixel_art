@@ -6,6 +6,7 @@ class SliderControl {
     final int min;
     int max;
     int value;
+    private int step = 1;
     final IntConsumer onChange;
     Rectangle track;
     Rectangle thumb;
@@ -18,8 +19,8 @@ class SliderControl {
         this.max = max;
         this.value = value;
         this.onChange = onChange;
-        this.minus = new ActionButton("-", () -> setValue(this.value - 1), false);
-        this.plus = new ActionButton("+", () -> setValue(this.value + 1), false);
+        this.minus = new ActionButton("-", () -> setValue(this.value - step), false);
+        this.plus = new ActionButton("+", () -> setValue(this.value + step), false);
     }
 
     void setMax(int newMax) {
@@ -27,6 +28,10 @@ class SliderControl {
         if (value > max) {
             setValue(max);
         }
+    }
+
+    void setStep(int step) {
+        this.step = Math.max(1, step);
     }
 
     void setValue(int newValue) {

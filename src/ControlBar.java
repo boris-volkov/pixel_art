@@ -199,13 +199,13 @@ class ControlBar extends JComponent {
     }
 
     void syncSliders() {
-        redSlider.value = app.getRed();
-        greenSlider.value = app.getGreen();
-        blueSlider.value = app.getBlue();
-        hueSlider.value = app.getHueDegrees();
-        satSlider.value = app.getSaturationPercent();
-        valSlider.value = app.getBrightnessPercent();
-        brushSlider.value = app.getBrushSize();
+        redSlider.setValueSilently(app.getRed());
+        greenSlider.setValueSilently(app.getGreen());
+        blueSlider.setValueSilently(app.getBlue());
+        hueSlider.setValueSilently(app.getHueDegrees());
+        satSlider.setValueSilently(app.getSaturationPercent());
+        valSlider.setValueSilently(app.getBrightnessPercent());
+        brushSlider.setValueSilently(app.getBrushSize());
         int newZoomMax = Math.max(2, app.computeMaxCellSizeForScreen());
         int maxZoom = Math.max(newZoomMax, PixelArtApp.MAX_CELL_SIZE);
         zoomSlider.setMax(maxZoom);
@@ -237,13 +237,25 @@ class ControlBar extends JComponent {
         }
         y += btnHeightTop + 6;
         ActionButton[] toolsTransform = { toolMove, toolRotate };
-        int toolWidthBottom = (availableWidth - gapTop) / toolsTransform.length;
+        int toolWidthBottom = (availableWidth - gapTop * (toolsTransform.length - 1)) / toolsTransform.length;
         for (int i = 0; i < toolsTransform.length; i++) {
             int x = padding + i * (toolWidthBottom + gapTop);
             toolsTransform[i].bounds = new Rectangle(x, y, toolWidthBottom, btnHeightTop);
             paintButton(g2, toolsTransform[i]);
         }
-        y += btnHeightTop + 10;
+        y += btnHeightTop + 8;
+
+        // Fill / Clear row directly under transform tools
+        int btnHeightFill = btnHeightTop;
+        int spacingFill = gapTop;
+        ActionButton fill = buttons.get(0);
+        ActionButton clear = buttons.get(1);
+        int btnWidthFull = (availableWidth - spacingFill) / 2;
+        fill.bounds = new Rectangle(padding, y, btnWidthFull, btnHeightFill);
+        clear.bounds = new Rectangle(padding + btnWidthFull + spacingFill, y, btnWidthFull, btnHeightFill);
+        paintButton(g2, fill);
+        paintButton(g2, clear);
+        y += btnHeightFill + 10;
 
         y = drawSlider(g2, redSlider, padding, y, availableWidth);
         y = drawSlider(g2, greenSlider, padding, y, availableWidth);
@@ -262,9 +274,9 @@ class ControlBar extends JComponent {
 
     private int drawSlider(Graphics2D g2, SliderControl slider, int padding, int y, int width) {
         int scale = 2;
-        int trackHeight = 5 * scale;
-        int thumbWidth = 4 * scale;
-        int thumbHeight = 6 * scale;
+        int trackHeight = 7 * scale;
+        int thumbWidth = 5 * scale;
+        int thumbHeight = 8 * scale;
         int labelWidth = 120;
         int valueWidth = 0;
         int btnWidth = 24;
@@ -308,7 +320,7 @@ class ControlBar extends JComponent {
         paintButton(g2, slider.minus);
         paintButton(g2, slider.plus);
 
-        return y + 36;
+        return y + 40;
     }
 
     private void drawButtons(Graphics2D g2, int padding, int y, int width) {
@@ -337,15 +349,7 @@ class ControlBar extends JComponent {
 
         y += rowHeight * 2 + gap + 8;
 
-        int btnWidthFull = (width - spacing) / 2;
-        ActionButton fill = buttons.get(0);
-        ActionButton clear = buttons.get(1);
-        fill.bounds = new Rectangle(padding, y, btnWidthFull, btnHeight);
-        paintButton(g2, fill);
-        clear.bounds = new Rectangle(padding + btnWidthFull + spacing, y, btnWidthFull, btnHeight);
-        paintButton(g2, clear);
-        y += btnHeight + spacing + 4;
-
+        // Fill/Clear directly under transform tools
         int rowH = btnHeight;
         int rowGap = 8;
         for (int i = 0; i < layerButtons.length; i++) {
@@ -390,8 +394,7 @@ class ControlBar extends JComponent {
     }
 
     private SliderControl findSlider(int x, int y) {
-        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, satSlider, valSlider, brushSlider,
-                hueSlider, brushSlider, zoomSlider)) {
+        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, hueSlider, satSlider, valSlider, brushSlider, zoomSlider)) {
             if (s.track != null && s.track.contains(x, y)) {
                 return s;
             }
@@ -419,9 +422,22 @@ class ControlBar extends JComponent {
     }
 
     private ActionButton findButtonAt(int x, int y) {
+        // Prioritize slider +/- so they aren't shadowed by nearby controls
+        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, hueSlider, satSlider, valSlider, brushSlider, zoomSlider)) {
+            for (ActionButton b : List.of(s.minus, s.plus)) {
+                if (b.bounds != null && b.bounds.contains(x, y)) {
+                    return b;
+                }
+            }
+        }
         for (ActionButton tb : List.of(toolBrush, toolStamp, toolFill, toolBlur, toolMove, toolRotate, toolErase)) {
             if (tb.bounds != null && tb.bounds.contains(x, y)) {
                 return tb;
+            }
+        }
+        for (ActionButton button : buttons) {
+            if (button.bounds != null && button.bounds.contains(x, y)) {
+                return button;
             }
         }
         for (ActionButton lb : layerButtons) {
@@ -437,19 +453,6 @@ class ControlBar extends JComponent {
         for (ActionButton ub : moveUpButtons) {
             if (ub.bounds != null && ub.bounds.contains(x, y)) {
                 return ub;
-            }
-        }
-        for (SliderControl s : List.of(redSlider, greenSlider, blueSlider, hueSlider, satSlider, valSlider, brushSlider,
-                zoomSlider)) {
-            for (ActionButton b : List.of(s.minus, s.plus)) {
-                if (b.bounds != null && b.bounds.contains(x, y)) {
-                    return b;
-                }
-            }
-        }
-        for (ActionButton button : buttons) {
-            if (button.bounds != null && button.bounds.contains(x, y)) {
-                return button;
             }
         }
         return null;
@@ -474,10 +477,13 @@ class ControlBar extends JComponent {
 
     private Color themedButtonColor(ActionButton button, String label, boolean accent) {
         if (isActiveTool(button) || isActiveLayer(button)) {
+            if (isActiveTool(button)) {
+                return PixelArtApp.MAGENTA_BTN; // highlight active tool
+            }
             return PixelArtApp.ACCENT;
         }
         if (button == toolMove || button == toolRotate) {
-            return PixelArtApp.MAGENTA_BTN;
+            return new Color(90, 180, 90); // gentler green for transforms
         }
         if (isVisButton(button)) {
             int idx = visIndex(button);
@@ -487,6 +493,9 @@ class ControlBar extends JComponent {
         if (label.startsWith("C")) {
             if (label.contains("-"))
                 return new Color(220, 90, 80);
+            return PixelArtApp.CYAN_BTN;
+        }
+        if ("Fill".equalsIgnoreCase(label) || "Clear".equalsIgnoreCase(label)) {
             return PixelArtApp.CYAN_BTN;
         }
         if (label.startsWith("M")) {
