@@ -38,7 +38,7 @@ import javax.imageio.metadata.IIOMetadataNode;
 import javax.imageio.stream.ImageOutputStream;
 
 public class PixelArtApp {
-    enum ToolMode {BRUSH, STAMP, FILL, BLUR, MOVE, ERASER}
+    enum ToolMode {BRUSH, STAMP, FILL, BLUR, MOVE, ROTATE, ERASER}
 
     static final Color BG = new Color(96, 96, 96);
     static final Color TEXT = new Color(226, 231, 240);

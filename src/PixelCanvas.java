@@ -49,6 +49,11 @@ class PixelCanvas extends javax.swing.JPanel {
     private Color[][] moveSnapshot = null;
     private int moveStartCol = 0;
     private int moveStartRow = 0;
+    private Color[][] rotateSnapshot = null;
+    private int rotateCenterCol = -1;
+    private int rotateCenterRow = -1;
+    private double rotateStartAngle = 0.0;
+    private boolean rotateActive = false;
     private boolean stampUsesOwnColors = true;
 
     PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback,
@@ -344,8 +349,12 @@ class PixelCanvas extends javax.swing.JPanel {
                 constrainStroke = e.isShiftDown();
                 anchorCol = toCell(e.getX());
                 anchorRow = toCell(e.getY());
-                if (modeSupplier != null && modeSupplier.get() == PixelArtApp.ToolMode.MOVE) {
+                PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
+                if (mode == PixelArtApp.ToolMode.MOVE) {
                     beginMove(anchorCol, anchorRow);
+                    return;
+                } else if (mode == PixelArtApp.ToolMode.ROTATE) {
+                    beginRotate(anchorCol, anchorRow);
                     return;
                 }
                 if (e.isAltDown()) {
@@ -361,8 +370,12 @@ class PixelCanvas extends javax.swing.JPanel {
                 if (panBlocker != null && panBlocker.getAsBoolean()) {
                     return;
                 }
-                if (modeSupplier != null && modeSupplier.get() == PixelArtApp.ToolMode.MOVE) {
+                PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
+                if (mode == PixelArtApp.ToolMode.MOVE) {
                     applyMove(toCell(e.getX()), toCell(e.getY()));
+                    return;
+                } else if (mode == PixelArtApp.ToolMode.ROTATE) {
+                    applyRotate(toCell(e.getX()), toCell(e.getY()));
                     return;
                 }
                 paintAt(e.getX(), e.getY());
@@ -372,6 +385,7 @@ class PixelCanvas extends javax.swing.JPanel {
             public void mouseReleased(MouseEvent e) {
                 endStroke();
                 endMove();
+                endRotate();
             }
 
             @Override
@@ -602,6 +616,58 @@ class PixelCanvas extends javax.swing.JPanel {
 
     private void endMove() {
         moveSnapshot = null;
+    }
+
+    private void beginRotate(int col, int row) {
+        pushUndo();
+        int layer = activeLayer();
+        rotateSnapshot = new Color[rows][columns];
+        for (int r = 0; r < rows; r++) {
+            rotateSnapshot[r] = Arrays.copyOf(layers[layer][r], columns);
+        }
+        rotateCenterCol = Math.max(0, Math.min(columns - 1, col));
+        rotateCenterRow = Math.max(0, Math.min(rows - 1, row));
+        rotateStartAngle = angleFromCenter(col, row);
+        rotateActive = true;
+    }
+
+    private void applyRotate(int col, int row) {
+        if (!rotateActive || rotateSnapshot == null) return;
+        double currentAngle = angleFromCenter(col, row);
+        double delta = currentAngle - rotateStartAngle;
+        int layer = activeLayer();
+        for (int r = 0; r < rows; r++) {
+            Arrays.fill(layers[layer][r], null);
+        }
+        double cos = Math.cos(-delta);
+        double sin = Math.sin(-delta);
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < columns; c++) {
+                double dx = c - rotateCenterCol;
+                double dy = r - rotateCenterRow;
+                double srcX = cos * dx - sin * dy + rotateCenterCol;
+                double srcY = sin * dx + cos * dy + rotateCenterRow;
+                int sx = (int) Math.round(srcX);
+                int sy = (int) Math.round(srcY);
+                if (sx >= 0 && sx < columns && sy >= 0 && sy < rows) {
+                    layers[layer][r][c] = rotateSnapshot[sy][sx];
+                } else {
+                    layers[layer][r][c] = null;
+                }
+            }
+        }
+        repaint();
+    }
+
+    private void endRotate() {
+        rotateSnapshot = null;
+        rotateActive = false;
+    }
+
+    private double angleFromCenter(int col, int row) {
+        double dx = col - rotateCenterCol;
+        double dy = row - rotateCenterRow;
+        return Math.atan2(dy, dx);
     }
 
     @Override

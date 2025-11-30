@@ -27,6 +27,7 @@ class ControlBar extends JComponent {
     private final ActionButton toolFill;
     private final ActionButton toolBlur;
     private final ActionButton toolMove;
+    private final ActionButton toolRotate;
     private final ActionButton toolErase;
     private final ActionButton[] layerButtons;
     private final ActionButton[] visButtons;
@@ -89,6 +90,10 @@ class ControlBar extends JComponent {
         }, true);
         toolMove = new ActionButton("MV", () -> {
             app.setToolMode(PixelArtApp.ToolMode.MOVE);
+            repaint();
+        }, true);
+        toolRotate = new ActionButton("RT", () -> {
+            app.setToolMode(PixelArtApp.ToolMode.ROTATE);
             repaint();
         }, true);
         toolErase = new ActionButton("ER", () -> {
@@ -220,15 +225,23 @@ class ControlBar extends JComponent {
         int y = padding;
         int availableWidth = getWidth() - padding * 2;
 
-        // Tool row
+        // Tool rows
         int btnHeightTop = 26;
         int gapTop = 6;
-        ActionButton[] tools = { toolBrush, toolErase, toolStamp, toolFill, toolBlur, toolMove };
-        int toolWidth = (availableWidth - gapTop * (tools.length - 1)) / tools.length;
-        for (int i = 0; i < tools.length; i++) {
-            int x = padding + i * (toolWidth + gapTop);
-            tools[i].bounds = new Rectangle(x, y, toolWidth, btnHeightTop);
-            paintButton(g2, tools[i]);
+        ActionButton[] toolsPrimary = { toolBrush, toolErase, toolStamp, toolFill, toolBlur };
+        int toolWidthTop = (availableWidth - gapTop * (toolsPrimary.length - 1)) / toolsPrimary.length;
+        for (int i = 0; i < toolsPrimary.length; i++) {
+            int x = padding + i * (toolWidthTop + gapTop);
+            toolsPrimary[i].bounds = new Rectangle(x, y, toolWidthTop, btnHeightTop);
+            paintButton(g2, toolsPrimary[i]);
+        }
+        y += btnHeightTop + 6;
+        ActionButton[] toolsTransform = { toolMove, toolRotate };
+        int toolWidthBottom = (availableWidth - gapTop) / toolsTransform.length;
+        for (int i = 0; i < toolsTransform.length; i++) {
+            int x = padding + i * (toolWidthBottom + gapTop);
+            toolsTransform[i].bounds = new Rectangle(x, y, toolWidthBottom, btnHeightTop);
+            paintButton(g2, toolsTransform[i]);
         }
         y += btnHeightTop + 10;
 
@@ -406,7 +419,7 @@ class ControlBar extends JComponent {
     }
 
     private ActionButton findButtonAt(int x, int y) {
-        for (ActionButton tb : List.of(toolBrush, toolStamp, toolFill, toolBlur, toolMove, toolErase)) {
+        for (ActionButton tb : List.of(toolBrush, toolStamp, toolFill, toolBlur, toolMove, toolRotate, toolErase)) {
             if (tb.bounds != null && tb.bounds.contains(x, y)) {
                 return tb;
             }
@@ -463,6 +476,9 @@ class ControlBar extends JComponent {
         if (isActiveTool(button) || isActiveLayer(button)) {
             return PixelArtApp.ACCENT;
         }
+        if (button == toolMove || button == toolRotate) {
+            return PixelArtApp.MAGENTA_BTN;
+        }
         if (isVisButton(button)) {
             int idx = visIndex(button);
             boolean visible = idx >= 0 && app.isLayerVisible(idx);
@@ -498,6 +514,8 @@ class ControlBar extends JComponent {
             return mode == PixelArtApp.ToolMode.BLUR;
         if (button == toolMove)
             return mode == PixelArtApp.ToolMode.MOVE;
+        if (button == toolRotate)
+            return mode == PixelArtApp.ToolMode.ROTATE;
         if (button == toolErase)
             return mode == PixelArtApp.ToolMode.ERASER;
         return false;
