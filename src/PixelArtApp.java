@@ -38,7 +38,9 @@ import javax.imageio.metadata.IIOMetadataNode;
 import javax.imageio.stream.ImageOutputStream;
 
 public class PixelArtApp {
-    enum ToolMode {BRUSH, STAMP, FILL, BLUR, MOVE, ROTATE, ERASER}
+    enum ToolMode {
+        BRUSH, STAMP, FILL, BLUR, MOVE, ROTATE, ERASER
+    }
 
     static final Color BG = new Color(96, 96, 96);
     static final Color TEXT = new Color(226, 231, 240);
@@ -60,33 +62,39 @@ public class PixelArtApp {
     static final int MIN_CELL_SIZE = 2;
     static final int MAX_CELL_SIZE = 256;
 
-    private PixelCanvas canvas;
+    PixelCanvas canvas;
     private PixelCanvas stampCanvas;
-    private CanvasViewport canvasHolder;
-    private ControlBar controlBar;
-    private TopBar topBar;
-    private ConsolePanel console;
-    private AnimationPanel timeline;
+    CanvasViewport canvasHolder;
+    ControlBar controlBar;
+    TopBar topBar;
+    ConsolePanel console;
+    AnimationPanel timeline;
     private JPanel southWrap;
-    private List<FrameData>[] layerFrames;
-    private int[] currentFrameIndex;
-    private Timer playTimer;
-    private boolean playing = false;
-    private int playCursor = 0;
+    List<FrameData>[] layerFrames;
+    int[] currentFrameIndex;
+    Timer playTimer;
+    boolean playing = false;
+    int playCursor = 0;
     private boolean onionEnabled = false;
-    private boolean[] animatedLayers;
-    private String[] layerNames = new String[]{"L1", "L2", "L3"};
-    private int frameRate = 6; // fps
-    private Color viewportBg = BG;
-    private final ColorState colorState = new ColorState();
-    private int brushSize = 1;
-    private int gridSize = 128;
-    private int canvasCellSize = computeMaxCellSizeForScreen();
-    private ToolMode toolMode = ToolMode.BRUSH;
-    private int activeLayer = 0;
+    boolean[] animatedLayers;
+    String[] layerNames = new String[] { "L1", "L2", "L3" };
+    int frameRate = 6; // fps
+    Color viewportBg = BG;
+    final ColorState colorState = new ColorState();
+    int brushSize = 1;
+    int gridSize = 128;
+    int canvasCellSize = computeMaxCellSizeForScreen();
+    ToolMode toolMode = ToolMode.BRUSH;
+    int activeLayer = 0;
     private boolean stampUseOwnColors = true;
-    private final boolean[] layerVisible = new boolean[]{true, true, true};
-    private enum CanvasTarget {MAIN, STAMP}
+    boolean[] layerVisible = new boolean[] { true, true, true };
+    PixelArtFileHandler fileHandler;
+    PixelArtAnimationHandler animationHandler;
+
+    enum CanvasTarget {
+        MAIN, STAMP
+    }
+
     private final java.util.Deque<CanvasTarget> undoOrder = new java.util.ArrayDeque<>();
     private final java.util.Deque<CanvasTarget> redoOrder = new java.util.ArrayDeque<>();
 
@@ -102,7 +110,9 @@ public class PixelArtApp {
         frame.getContentPane().setBackground(BG);
 
         syncHSBFromRGB();
-        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
+        canvas = new PixelCanvas(gridSize, gridSize, canvasCellSize, this::pickBrushColor, this::setBrushSize,
+                this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3,
+                this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
         canvas.setCurrentColor(currentBrushColor());
         canvas.setBrushSize(brushSize);
         canvas.setStampUsesOwnColors(stampUseOwnColors);
@@ -121,6 +131,8 @@ public class PixelArtApp {
 
         controlBar = new ControlBar(this);
         console = new ConsolePanel(this::handleCommand);
+        fileHandler = new PixelArtFileHandler(this);
+        animationHandler = new PixelArtAnimationHandler(this);
         topBar = new TopBar(this);
         setCanvasCellSize(computeMaxCellSizeForScreen());
 
@@ -243,15 +255,18 @@ public class PixelArtApp {
         setBrushColor(color);
         if (toolMode != ToolMode.STAMP && toolMode != ToolMode.FILL) {
             setToolMode(ToolMode.BRUSH);
-            if (controlBar != null) controlBar.repaint();
+            if (controlBar != null)
+                controlBar.repaint();
         }
     }
 
     void setBrushColor(Color color) {
-        if (color == null) return;
+        if (color == null)
+            return;
         colorState.setFromColor(color);
         updateBrushTargets(color);
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
 
     void onBrushSizeChanged(int size) {
@@ -269,7 +284,9 @@ public class PixelArtApp {
         resetAnimationState();
         gridSize = Math.max(newCols, newRows);
         canvasCellSize = computeMaxCellSizeForScreen();
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::pickBrushColor,
+                this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite,
+                this::getActiveLayer, 3, this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
         newCanvas.setCurrentColor(currentBrushColor());
         newCanvas.setBrushSize(brushSize);
         this.canvas = newCanvas;
@@ -287,7 +304,8 @@ public class PixelArtApp {
         int g = clamp(c.getGreen() + delta);
         int b = clamp(c.getBlue() + delta);
         setBrushColor(new Color(r, g, b));
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
 
     void setCanvasCellSize(int size) {
@@ -298,7 +316,8 @@ public class PixelArtApp {
             canvas.setCellSize(canvasCellSize);
             canvasHolder.refreshLayout();
         }
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
 
     int getCanvasCellSize() {
@@ -306,7 +325,8 @@ public class PixelArtApp {
     }
 
     private void resampleCanvas(int factor) {
-        if (factor <= 1) return;
+        if (factor <= 1)
+            return;
         ensureFrameCapacity();
         saveCurrentFrames();
         int oldRows = canvas.getRows();
@@ -323,11 +343,15 @@ public class PixelArtApp {
             for (FrameData fd : lf) {
                 dest.add(new FrameData(scaleLayer(fd.layer, factor)));
             }
-            if (dest.isEmpty()) dest.add(new FrameData(new Color[newRows][newCols]));
+            if (dest.isEmpty())
+                dest.add(new FrameData(new Color[newRows][newCols]));
             scaledFrames.add(dest);
         }
         // Rebuild canvas
-        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, scaledFrames.size(), this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
+        PixelCanvas newCanvas = new PixelCanvas(newCols, newRows, canvasCellSize, this::pickBrushColor,
+                this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite,
+                this::getActiveLayer, scaledFrames.size(), this::isLayerVisible, null, false,
+                () -> recordUndo(CanvasTarget.MAIN));
         this.canvas = newCanvas;
         canvasHolder.setCanvas(newCanvas);
         ensureLayerNamesSize(newCanvas.getLayerCount());
@@ -344,7 +368,8 @@ public class PixelArtApp {
         canvas.setBrushSize(brushSize);
         canvasHolder.recenter();
         setCanvasCellSize(computeMaxCellSizeForScreen());
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
         syncHSBFromRGB();
     }
 
@@ -365,45 +390,53 @@ public class PixelArtApp {
         return Math.max(0, Math.min(100, v));
     }
 
-    private void recordUndo(CanvasTarget target) {
+    void recordUndo(CanvasTarget target) {
         undoOrder.push(target);
         redoOrder.clear();
     }
 
     private void performUndo() {
-        if (undoOrder.isEmpty()) return;
+        if (undoOrder.isEmpty())
+            return;
         CanvasTarget target = undoOrder.pop();
         switch (target) {
             case MAIN -> canvas.undo();
             case STAMP -> {
-                if (stampCanvas != null) stampCanvas.undo();
+                if (stampCanvas != null)
+                    stampCanvas.undo();
             }
         }
         redoOrder.push(target);
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
 
     private void performRedo() {
-        if (redoOrder.isEmpty()) return;
+        if (redoOrder.isEmpty())
+            return;
         CanvasTarget target = redoOrder.pop();
         switch (target) {
             case MAIN -> canvas.redo();
             case STAMP -> {
-                if (stampCanvas != null) stampCanvas.redo();
+                if (stampCanvas != null)
+                    stampCanvas.redo();
             }
         }
         undoOrder.push(target);
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
 
-    private void syncHSBFromRGB() {
+    void syncHSBFromRGB() {
         colorState.setFromColor(colorState.getColor());
     }
 
     private void autoBrushIfColorControl() {
-        if (toolMode == ToolMode.STAMP || toolMode == ToolMode.FILL) return;
+        if (toolMode == ToolMode.STAMP || toolMode == ToolMode.FILL)
+            return;
         setToolMode(ToolMode.BRUSH);
-        if (controlBar != null) controlBar.repaint();
+        if (controlBar != null)
+            controlBar.repaint();
     }
 
     PixelCanvas getStampCanvas() {
@@ -423,7 +456,7 @@ public class PixelArtApp {
                     return;
                 }
                 try {
-                    saveImage(parts[1]);
+                    fileHandler.saveImage(parts[1]);
                     console.setStatus("Saved to " + parts[1]);
                 } catch (IOException ex) {
                     console.setStatus("Save failed: " + ex.getMessage());
@@ -435,7 +468,7 @@ public class PixelArtApp {
                     return;
                 }
                 try {
-                    saveSequence(parts[1]);
+                    fileHandler.saveSequence(parts[1]);
                     console.setStatus("Saved sequence for " + parts[1]);
                 } catch (IOException ex) {
                     console.setStatus("Save-seq failed: " + ex.getMessage());
@@ -447,7 +480,7 @@ public class PixelArtApp {
                     return;
                 }
                 try {
-                    saveProject(parts[1]);
+                    fileHandler.saveProject(parts[1]);
                     console.setStatus("Project saved to " + parts[1]);
                 } catch (IOException ex) {
                     console.setStatus("Save-project failed: " + ex.getMessage());
@@ -459,7 +492,7 @@ public class PixelArtApp {
                     return;
                 }
                 try {
-                    saveGif(parts[1]);
+                    fileHandler.saveGif(parts[1]);
                     console.setStatus("GIF saved to " + parts[1]);
                 } catch (IOException ex) {
                     console.setStatus("Save-gif failed: " + ex.getMessage());
@@ -471,7 +504,7 @@ public class PixelArtApp {
                     return;
                 }
                 try {
-                    loadProject(parts[1]);
+                    fileHandler.loadProject(parts[1]);
                     console.setStatus("Project loaded from " + parts[1]);
                 } catch (IOException | ClassNotFoundException ex) {
                     console.setStatus("Load-project failed: " + ex.getMessage());
@@ -483,7 +516,7 @@ public class PixelArtApp {
                     return;
                 }
                 try {
-                    loadImage(parts[1]);
+                    fileHandler.loadImage(parts[1]);
                     console.setStatus("Loaded " + parts[1]);
                 } catch (IOException ex) {
                     console.setStatus("Load failed: " + ex.getMessage());
@@ -504,13 +537,15 @@ public class PixelArtApp {
                 try {
                     if (parts.length == 2) {
                         int size = Integer.parseInt(parts[1]);
-                        if (size <= 0) throw new NumberFormatException();
+                        if (size <= 0)
+                            throw new NumberFormatException();
                         rebuildCanvas(size, size);
                         console.setStatus("Created new " + size + "x" + size + " canvas");
                     } else {
                         int w = Integer.parseInt(parts[1]);
                         int h = Integer.parseInt(parts[2]);
-                        if (w <= 0 || h <= 0) throw new NumberFormatException();
+                        if (w <= 0 || h <= 0)
+                            throw new NumberFormatException();
                         rebuildCanvas(w, h);
                         console.setStatus("Created new " + w + "x" + h + " canvas");
                     }
@@ -549,7 +584,8 @@ public class PixelArtApp {
                 }
                 break;
             case "help":
-                console.setStatus("Commands: save <file.png> | save-sequence <base.png> | save-gif <file.gif> | save-project <file> | load-project <file> | load <file.png> | resolution | new <size> | flip h|v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd|ordered | resample <factor> | calc <expr> | animate [layer] | framerate <fps> | duplicate | rename L# <name> | exit");
+                console.setStatus(
+                        "Commands: save <file.png> | save-sequence <base.png> | save-gif <file.gif> | save-project <file> | load-project <file> | load <file.png> | resolution | new <size> | flip h|v | blur gaussian <r> | blur motion <angle> <amt> | dither floyd|ordered | resample <factor> | calc <expr> | animate [layer] | framerate <fps> | duplicate | rename L# <name> | exit");
                 break;
             case "blur":
                 if (parts.length < 3) {
@@ -644,14 +680,16 @@ public class PixelArtApp {
                     String newName = input.substring(input.indexOf(parts[2]));
                     setLayerName(idx, newName.trim());
                     console.setStatus("Layer " + (idx + 1) + " renamed to " + newName);
-                    if (controlBar != null) controlBar.repaint();
+                    if (controlBar != null)
+                        controlBar.repaint();
                 } catch (NumberFormatException ex) {
                     console.setStatus("Usage: rename L1 <name>");
                 }
                 break;
             case "duplicate":
                 duplicateCurrentFrame();
-                console.setStatus("Duplicated frame " + (getCurrentFrameIndexForActiveLayer() + 1) + " on " + getLayerName(activeLayer));
+                console.setStatus("Duplicated frame " + (getCurrentFrameIndexForActiveLayer() + 1) + " on "
+                        + getLayerName(activeLayer));
                 break;
             case "background":
                 if (parts.length < 4) {
@@ -675,7 +713,8 @@ public class PixelArtApp {
             case "onion":
                 toggleOnion();
                 console.setStatus("Onion " + (onionEnabled ? "ON" : "OFF"));
-                if (canvas != null) canvas.repaint();
+                if (canvas != null)
+                    canvas.repaint();
                 break;
             case "resample":
                 if (parts.length < 2) {
@@ -714,7 +753,8 @@ public class PixelArtApp {
             case "exit":
                 System.exit(0);
             default:
-                console.setStatus("Unknown. Try: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | calc | exit");
+                console.setStatus(
+                        "Unknown. Try: save <file.png> | load <file.png> | resolution | new <size> | flip h | flip v | blur gaussian <r> | dither floyd | dither ordered | resample <factor> | calc | exit");
         }
     }
 
@@ -737,9 +777,13 @@ public class PixelArtApp {
             for (int c = 0; c < cols; c++) {
                 Color color = null;
                 for (int l = layerData.length - 1; l >= 0; l--) {
-                    if (layerData[l] == null) continue;
+                    if (layerData[l] == null)
+                        continue;
                     Color cc = layerData[l][r][c];
-                    if (cc != null) { color = cc; break; }
+                    if (cc != null) {
+                        color = cc;
+                        break;
+                    }
                 }
                 if (color == null) {
                     img.setRGB(c, r, 0x00000000);
@@ -752,8 +796,11 @@ public class PixelArtApp {
     }
 
     private void writeGif(List<BufferedImage> framesOut, int delayCs, String path) throws IOException {
-        ImageWriter writer = ImageIO.getImageWritersBySuffix("gif").hasNext() ? ImageIO.getImageWritersBySuffix("gif").next() : null;
-        if (writer == null) throw new IOException("No GIF writer available");
+        ImageWriter writer = ImageIO.getImageWritersBySuffix("gif").hasNext()
+                ? ImageIO.getImageWritersBySuffix("gif").next()
+                : null;
+        if (writer == null)
+            throw new IOException("No GIF writer available");
         try (ImageOutputStream ios = ImageIO.createImageOutputStream(new File(path))) {
             writer.setOutput(ios);
             writer.prepareWriteSequence(null);
@@ -776,7 +823,7 @@ public class PixelArtApp {
                     IIOMetadataNode ae = new IIOMetadataNode("ApplicationExtension");
                     ae.setAttribute("applicationID", "NETSCAPE");
                     ae.setAttribute("authenticationCode", "2.0");
-                    byte[] loop = new byte[]{1, 0, 0};
+                    byte[] loop = new byte[] { 1, 0, 0 };
                     ae.setUserObject(loop);
                     aes.appendChild(ae);
                 }
@@ -823,7 +870,8 @@ public class PixelArtApp {
         }
         File baseFile = new File(prefix);
         File parentDir = baseFile.getParentFile();
-        if (parentDir == null) parentDir = new File(".");
+        if (parentDir == null)
+            parentDir = new File(".");
         String dirName = baseFile.getName();
         File outDir = new File(parentDir, dirName);
         if (!outDir.exists() && !outDir.mkdirs()) {
@@ -835,7 +883,8 @@ public class PixelArtApp {
             Color[][][] snapshot = new Color[layerCount][][];
             for (int l = 0; l < layerCount; l++) {
                 List<FrameData> lf = layerFrames[l];
-                if (lf.isEmpty()) continue;
+                if (lf.isEmpty())
+                    continue;
                 FrameData fd = lf.get(i % lf.size());
                 snapshot[l] = fd.layer;
             }
@@ -868,7 +917,8 @@ public class PixelArtApp {
             Color[][][] snapshot = new Color[layerCount][][];
             for (int l = 0; l < layerCount; l++) {
                 List<FrameData> lf = layerFrames[l];
-                if (lf.isEmpty()) continue;
+                if (lf.isEmpty())
+                    continue;
                 FrameData fd = lf.get(i % lf.size());
                 snapshot[l] = fd.layer;
             }
@@ -909,13 +959,17 @@ public class PixelArtApp {
     }
 
     private void loadProject(String path) throws IOException, ClassNotFoundException {
-        if (playTimer != null) playTimer.stop();
+        if (playTimer != null)
+            playTimer.stop();
         playing = false;
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
             ProjectData data = (ProjectData) ois.readObject();
             gridSize = Math.max(data.cols, data.rows);
             canvasCellSize = Math.min(MAX_CELL_SIZE, Math.max(2, data.cellSize));
-            PixelCanvas newCanvas = new PixelCanvas(data.cols, data.rows, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, data.layerFrames.size(), this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
+            PixelCanvas newCanvas = new PixelCanvas(data.cols, data.rows, canvasCellSize, this::pickBrushColor,
+                    this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite,
+                    this::getActiveLayer, data.layerFrames.size(), this::isLayerVisible, null, false,
+                    () -> recordUndo(CanvasTarget.MAIN));
             canvas = newCanvas;
             canvasHolder.setCanvas(newCanvas);
             viewportBg = data.viewportBg != null ? data.viewportBg : BG;
@@ -948,9 +1002,12 @@ public class PixelArtApp {
             updateBrushTargets(currentBrushColor());
             canvas.setBrushSize(brushSize);
             syncHSBFromRGB();
-            if (controlBar != null) controlBar.syncSliders();
-            if (timeline != null) timeline.repaint();
-            if (topBar != null) topBar.repaint();
+            if (controlBar != null)
+                controlBar.syncSliders();
+            if (timeline != null)
+                timeline.repaint();
+            if (topBar != null)
+                topBar.repaint();
         }
     }
 
@@ -961,7 +1018,8 @@ public class PixelArtApp {
     private void loadImage(String path) throws IOException {
         resetAnimationState();
         BufferedImage img = ImageIO.read(new File(path));
-        if (img == null) throw new IOException("Unsupported image");
+        if (img == null)
+            throw new IOException("Unsupported image");
         int w = img.getWidth();
         int h = img.getHeight();
         if (w != h) {
@@ -969,7 +1027,9 @@ public class PixelArtApp {
         }
         gridSize = w;
         canvasCellSize = Math.min(canvasCellSize, MAX_CELL_SIZE);
-        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::pickBrushColor, this::setBrushSize, this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3, this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
+        PixelCanvas newCanvas = new PixelCanvas(w, h, canvasCellSize, this::pickBrushColor, this::setBrushSize,
+                this::getToolMode, this::getStampPixels, this::getOnionComposite, this::getActiveLayer, 3,
+                this::isLayerVisible, null, false, () -> recordUndo(CanvasTarget.MAIN));
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int argb = img.getRGB(x, y);
@@ -986,8 +1046,10 @@ public class PixelArtApp {
         canvasHolder.setCanvas(newCanvas);
         setCanvasCellSize(computeMaxCellSizeForScreen());
         syncHSBFromRGB();
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
+
     static Color adjustChannel(Color color, int redDelta, int greenDelta, int blueDelta) {
         int r = clamp(color.getRed() + redDelta);
         int g = clamp(color.getGreen() + greenDelta);
@@ -1011,7 +1073,8 @@ public class PixelArtApp {
         if (expr.startsWith("(")) {
             java.util.ArrayDeque<String> tokens = tokenize(expr);
             double val = parseList(tokens);
-            if (!tokens.isEmpty()) throw new IllegalArgumentException("Extra tokens");
+            if (!tokens.isEmpty())
+                throw new IllegalArgumentException("Extra tokens");
             return val;
         } else {
             String[] parts = expr.split("\\s+");
@@ -1044,15 +1107,19 @@ public class PixelArtApp {
                 sb.append(ch);
             }
         }
-        if (sb.length() > 0) out.addLast(sb.toString());
+        if (sb.length() > 0)
+            out.addLast(sb.toString());
         return out;
     }
 
     private double parseList(java.util.ArrayDeque<String> tokens) {
-        if (tokens.isEmpty()) throw new IllegalArgumentException("Incomplete expression");
+        if (tokens.isEmpty())
+            throw new IllegalArgumentException("Incomplete expression");
         String t = tokens.removeFirst();
-        if (!"(".equals(t)) throw new IllegalArgumentException("Expected '('");
-        if (tokens.isEmpty()) throw new IllegalArgumentException("Missing operator");
+        if (!"(".equals(t))
+            throw new IllegalArgumentException("Expected '('");
+        if (tokens.isEmpty())
+            throw new IllegalArgumentException("Missing operator");
         String op = tokens.removeFirst();
         java.util.List<Double> vals = new java.util.ArrayList<>();
         while (!tokens.isEmpty() && !" )".contains(tokens.peekFirst()) && !")".equals(tokens.peekFirst())) {
@@ -1062,7 +1129,8 @@ public class PixelArtApp {
             tokens.removeFirst();
             break;
         }
-        if (vals.isEmpty()) throw new IllegalArgumentException("Missing operands");
+        if (vals.isEmpty())
+            throw new IllegalArgumentException("Missing operands");
         return applyOp(op, vals);
     }
 
@@ -1081,7 +1149,8 @@ public class PixelArtApp {
     }
 
     private double parseAny(java.util.ArrayDeque<String> tokens) {
-        if (tokens.isEmpty()) throw new IllegalArgumentException("Incomplete");
+        if (tokens.isEmpty())
+            throw new IllegalArgumentException("Incomplete");
         String next = tokens.peekFirst();
         if ("(".equals(next)) {
             return parseList(tokens);
@@ -1099,92 +1168,148 @@ public class PixelArtApp {
     }
 
     private double applyOp(String op, java.util.List<Double> vals) {
-        if (vals.isEmpty()) throw new IllegalArgumentException("Missing operands");
+        if (vals.isEmpty())
+            throw new IllegalArgumentException("Missing operands");
         switch (op) {
             case "+":
                 double sum = 0;
-                for (double v : vals) sum += v;
+                for (double v : vals)
+                    sum += v;
                 return sum;
             case "*":
                 double prod = 1;
-                for (double v : vals) prod *= v;
+                for (double v : vals)
+                    prod *= v;
                 return prod;
             case "-":
-                if (vals.size() == 1) return -vals.get(0);
+                if (vals.size() == 1)
+                    return -vals.get(0);
                 double res = vals.get(0);
-                for (int i = 1; i < vals.size(); i++) res -= vals.get(i);
+                for (int i = 1; i < vals.size(); i++)
+                    res -= vals.get(i);
                 return res;
             case "/":
-                if (vals.size() == 1) return 1.0 / vals.get(0);
+                if (vals.size() == 1)
+                    return 1.0 / vals.get(0);
                 double div = vals.get(0);
-                for (int i = 1; i < vals.size(); i++) div /= vals.get(i);
+                for (int i = 1; i < vals.size(); i++)
+                    div /= vals.get(i);
                 return div;
             default:
                 throw new IllegalArgumentException("Unknown op: " + op);
         }
     }
 
-    int getRed() { return colorState.getRed(); }
-    int getGreen() { return colorState.getGreen(); }
-    int getBlue() { return colorState.getBlue(); }
+    int getRed() {
+        return colorState.getRed();
+    }
+
+    int getGreen() {
+        return colorState.getGreen();
+    }
+
+    int getBlue() {
+        return colorState.getBlue();
+    }
+
     void setRed(int v) {
         colorState.setRed(v);
         updateBrushTargets();
         autoBrushIfColorControl();
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
+
     void setGreen(int v) {
         colorState.setGreen(v);
         updateBrushTargets();
         autoBrushIfColorControl();
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
+
     void setBlue(int v) {
         colorState.setBlue(v);
         updateBrushTargets();
         autoBrushIfColorControl();
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
+
     int getHueDegrees() {
         return colorState.getHue();
     }
+
     int getSaturationPercent() {
         return colorState.getSaturation();
     }
+
     int getBrightnessPercent() {
         return colorState.getBrightness();
     }
+
     void setSaturationPercent(int percent) {
         colorState.setSaturation(percent);
         updateBrushTargets(colorState.getColor());
         autoBrushIfColorControl();
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
+
     void setBrightnessPercent(int percent) {
         colorState.setBrightness(percent);
         updateBrushTargets(colorState.getColor());
         autoBrushIfColorControl();
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
+
     void setHueDegrees(int deg) {
         colorState.setHue(deg);
         updateBrushTargets(colorState.getColor());
         autoBrushIfColorControl();
-        if (controlBar != null) controlBar.syncSliders();
+        if (controlBar != null)
+            controlBar.syncSliders();
     }
-    int getBrushSize() { return brushSize; }
-    void setBrushSize(int size) { onBrushSizeChanged(size); if (canvas != null) canvas.setBrushSize(size); }
-    ToolMode getToolMode() { return toolMode; }
-    void setToolMode(ToolMode mode) { toolMode = mode; }
-    PixelCanvas getCanvas() { return canvas; }
-    int getActiveLayer() { return activeLayer; }
+
+    int getBrushSize() {
+        return brushSize;
+    }
+
+    void setBrushSize(int size) {
+        onBrushSizeChanged(size);
+        if (canvas != null)
+            canvas.setBrushSize(size);
+    }
+
+    ToolMode getToolMode() {
+        return toolMode;
+    }
+
+    void setToolMode(ToolMode mode) {
+        toolMode = mode;
+    }
+
+    PixelCanvas getCanvas() {
+        return canvas;
+    }
+
+    int getActiveLayer() {
+        return activeLayer;
+    }
+
     void setActiveLayer(int layer) {
         ensureFrameCapacity();
         int max = canvas != null ? canvas.getLayerCount() - 1 : 2;
         activeLayer = Math.max(0, Math.min(max, layer));
-        if (timeline != null) timeline.repaint();
+        if (timeline != null)
+            timeline.repaint();
     }
-    boolean isLayerVisible(int layer) { return layerVisible[Math.max(0, Math.min(layerVisible.length - 1, layer))]; }
+
+    boolean isLayerVisible(int layer) {
+        return layerVisible[Math.max(0, Math.min(layerVisible.length - 1, layer))];
+    }
+
     void toggleLayerVisibility(int layer) {
         int idx = Math.max(0, Math.min(layerVisible.length - 1, layer));
         layerVisible[idx] = !layerVisible[idx];
@@ -1192,58 +1317,89 @@ public class PixelArtApp {
             canvas.repaint();
         }
     }
+
     void swapLayerUp(int idx) {
         ensureFrameCapacity();
-        if (idx <= 0 || idx >= canvas.getLayerCount()) return;
+        if (idx <= 0 || idx >= canvas.getLayerCount())
+            return;
         swapArray(layerFrames, idx, idx - 1);
         swapInt(currentFrameIndex, idx, idx - 1);
         swapBoolean(layerVisible, idx, idx - 1);
         swapBoolean(animatedLayers, idx, idx - 1);
         swapString(layerNames, idx, idx - 1);
         canvas.swapLayers(idx, idx - 1);
-        if (activeLayer == idx) activeLayer = idx - 1;
-        else if (activeLayer == idx - 1) activeLayer = idx;
-        if (controlBar != null) controlBar.repaint();
-        if (topBar != null) topBar.repaint();
+        if (activeLayer == idx)
+            activeLayer = idx - 1;
+        else if (activeLayer == idx - 1)
+            activeLayer = idx;
+        if (controlBar != null)
+            controlBar.repaint();
+        if (topBar != null)
+            topBar.repaint();
         canvas.repaint();
     }
-    boolean isOnionEnabled() { return onionEnabled; }
+
+    boolean isOnionEnabled() {
+        return onionEnabled;
+    }
+
     void toggleOnion() {
         onionEnabled = !onionEnabled;
-        if (canvas != null) canvas.repaint();
+        if (canvas != null)
+            canvas.repaint();
     }
 
     // Animation helpers
-    List<FrameData> getFramesForActiveLayer() { ensureFrameCapacity(); return layerFrames[activeLayer]; }
-    int getCurrentFrameIndexForActiveLayer() { ensureFrameCapacity(); return currentFrameIndex[activeLayer]; }
-    boolean isPlaying() { return playing; }
+    List<FrameData> getFramesForActiveLayer() {
+        ensureFrameCapacity();
+        return layerFrames[activeLayer];
+    }
+
+    int getCurrentFrameIndexForActiveLayer() {
+        ensureFrameCapacity();
+        return currentFrameIndex[activeLayer];
+    }
+
+    boolean isPlaying() {
+        return playing;
+    }
+
     boolean isLayerAnimated(int layer) {
         ensureFrameCapacity();
         return animatedLayers[Math.max(0, Math.min(animatedLayers.length - 1, layer))];
     }
+
     void toggleAnimatedLayer(int layer) {
         ensureFrameCapacity();
         int idx = Math.max(0, Math.min(animatedLayers.length - 1, layer));
         animatedLayers[idx] = !animatedLayers[idx];
-        if (timeline != null) timeline.repaint();
+        if (timeline != null)
+            timeline.repaint();
     }
+
     String getLayerName(int idx) {
         int i = Math.max(0, Math.min(layerNames.length - 1, idx));
         return layerNames[i];
     }
+
     void setLayerName(int idx, String name) {
         int i = Math.max(0, Math.min(layerNames.length - 1, idx));
         layerNames[i] = name;
     }
 
-    boolean isStampUsingOwnColors() { return stampUseOwnColors; }
+    boolean isStampUsingOwnColors() {
+        return stampUseOwnColors;
+    }
+
     void setStampUseOwnColors(boolean own) {
         stampUseOwnColors = own;
-        if (canvas != null) canvas.setStampUsesOwnColors(own);
+        if (canvas != null)
+            canvas.setStampUsesOwnColors(own);
     }
 
     private Integer parseLayerToken(String token) {
-        if (token == null) return null;
+        if (token == null)
+            return null;
         String lower = token.toLowerCase();
         if (lower.startsWith("l")) {
             try {
@@ -1265,8 +1421,9 @@ public class PixelArtApp {
         }
     }
 
-    private void ensureLayerNamesSize(int count) {
-        if (layerNames.length == count) return;
+    void ensureLayerNamesSize(int count) {
+        if (layerNames.length == count)
+            return;
         String[] prev = layerNames;
         layerNames = new String[count];
         for (int i = 0; i < count; i++) {
@@ -1278,8 +1435,9 @@ public class PixelArtApp {
         }
     }
 
-    private void initLayerFrames(int count) {
-        if (count <= 0) count = 1;
+    void initLayerFrames(int count) {
+        if (count <= 0)
+            count = 1;
         layerFrames = new ArrayList[count];
         currentFrameIndex = new int[count];
         animatedLayers = new boolean[count];
@@ -1291,7 +1449,7 @@ public class PixelArtApp {
         }
     }
 
-    private void ensureFrameCapacity() {
+    void ensureFrameCapacity() {
         int expected = canvas != null ? canvas.getLayerCount() : (layerFrames == null ? 0 : layerFrames.length);
         if (layerFrames == null || layerFrames.length != expected) {
             initLayerFrames(expected);
@@ -1299,121 +1457,31 @@ public class PixelArtApp {
     }
 
     void addFrameFromCurrent() {
-        ensureFrameCapacity();
-        saveCurrentFrames();
-        int layer = activeLayer;
-        FrameData data = captureFrameForLayer(layer);
-        List<FrameData> frames = layerFrames[layer];
-        frames.add(data);
-        currentFrameIndex[layer] = frames.size() - 1;
-        applyFrameForLayer(layer, data);
-        if (timeline != null) timeline.repaint();
+        animationHandler.addFrameFromCurrent();
     }
 
     void addBlankFrame() {
-        ensureFrameCapacity();
-        saveCurrentFrames();
-        int layer = activeLayer;
-        List<FrameData> frames = layerFrames[layer];
-        int insertAt = Math.min(frames.size(), currentFrameIndex[layer] + 1);
-        FrameData data = createEmptyFrameForLayer(layer);
-        frames.add(insertAt, data);
-        currentFrameIndex[layer] = insertAt;
-        syncOtherLayersToActive(currentFrameIndex[layer]);
-        applyAllCurrentFrames();
-        if (timeline != null) timeline.repaint();
+        animationHandler.addBlankFrame();
     }
 
     void duplicateCurrentFrame() {
-        ensureFrameCapacity();
-        int layer = activeLayer;
-        List<FrameData> frames = layerFrames[layer];
-        if (frames.isEmpty()) {
-            addBlankFrame();
-            return;
-        }
-        saveCurrentFrames();
-        FrameData snapshot = captureFrameForLayer(layer);
-        int insertAt = Math.min(frames.size(), currentFrameIndex[layer] + 1);
-        frames.add(insertAt, snapshot);
-        currentFrameIndex[layer] = insertAt;
-        syncOtherLayersToActive(currentFrameIndex[layer]);
-        applyAllCurrentFrames();
-        if (timeline != null) timeline.repaint();
+        animationHandler.duplicateCurrentFrame();
     }
 
     void deleteCurrentFrame() {
-        ensureFrameCapacity();
-        int layer = activeLayer;
-        List<FrameData> frames = layerFrames[layer];
-        if (frames.isEmpty()) return;
-        frames.remove(currentFrameIndex[layer]);
-        if (frames.isEmpty()) {
-            FrameData blank = createEmptyFrameForLayer(layer);
-            frames.add(blank);
-            currentFrameIndex[layer] = 0;
-            applyFrameForLayer(layer, blank);
-        } else {
-            currentFrameIndex[layer] = Math.max(0, Math.min(currentFrameIndex[layer], frames.size() - 1));
-            applyFrameForLayer(layer, frames.get(currentFrameIndex[layer]));
-        }
-        if (timeline != null) timeline.repaint();
+        animationHandler.deleteCurrentFrame();
     }
 
     void selectFrame(int index) {
-        ensureFrameCapacity();
-        int layer = activeLayer;
-        List<FrameData> frames = layerFrames[layer];
-        if (index < 0 || index >= frames.size()) return;
-        saveCurrentFrames();
-        currentFrameIndex[layer] = index;
-        playCursor = index;
-        syncOtherLayersToActive(index);
-        applyAllCurrentFrames();
-        if (timeline != null) timeline.repaint();
+        animationHandler.selectFrame(index);
     }
 
     void stepFrame(int delta) {
-        ensureFrameCapacity();
-        if (layerFrames == null || activeLayer < 0 || activeLayer >= layerFrames.length) return;
-        List<FrameData> frames = layerFrames[activeLayer];
-        if (frames == null || frames.isEmpty()) return;
-        saveCurrentFrames();
-        int size = frames.size();
-        int next = (currentFrameIndex[activeLayer] + delta) % size;
-        if (next < 0) next += size;
-        currentFrameIndex[activeLayer] = next;
-        playCursor = next;
-        syncOtherLayersToActive(next);
-        applyAllCurrentFrames();
-        if (timeline != null) timeline.repaint();
+        animationHandler.stepFrame(delta);
     }
 
     void togglePlayback() {
-        boolean anyFrames = false;
-        for (List<FrameData> lf : layerFrames) {
-            if (lf != null && lf.size() > 1) {
-                anyFrames = true;
-                break;
-            }
-        }
-        if (!anyFrames) {
-            console.setStatus("No frames to play");
-            return;
-        }
-        syncOtherLayersToActive(currentFrameIndex[activeLayer]);
-        playCursor = currentFrameIndex[activeLayer];
-        playing = !playing;
-        if (playing) {
-            if (playTimer == null) {
-                playTimer = new Timer(delayFromFPS(), e -> advanceFrame());
-            }
-            playTimer.setDelay(delayFromFPS());
-            playTimer.start();
-        } else {
-            if (playTimer != null) playTimer.stop();
-        }
-        if (timeline != null) timeline.repaint();
+        animationHandler.togglePlayback();
     }
 
     private void advanceFrame() {
@@ -1422,84 +1490,100 @@ public class PixelArtApp {
         int maxLen = 0;
         for (int l = 0; l < layerFrames.length; l++) {
             List<FrameData> lf = layerFrames[l];
-            if (lf == null) continue;
-            if (!animatedLayers[l]) continue;
+            if (lf == null)
+                continue;
+            if (!animatedLayers[l])
+                continue;
             maxLen = Math.max(maxLen, lf.size());
         }
         if (maxLen <= 0) {
             playing = false;
-            if (playTimer != null) playTimer.stop();
+            if (playTimer != null)
+                playTimer.stop();
             return;
         }
         playCursor = (playCursor + 1) % maxLen;
         for (int l = 0; l < layerFrames.length; l++) {
             List<FrameData> lf = layerFrames[l];
-            if (lf == null || lf.isEmpty()) continue;
-            if (!animatedLayers[l]) continue;
+            if (lf == null || lf.isEmpty())
+                continue;
+            if (!animatedLayers[l])
+                continue;
             currentFrameIndex[l] = playCursor % lf.size();
         }
         applyAllCurrentFrames();
-        if (timeline != null) timeline.repaint();
+        if (timeline != null)
+            timeline.repaint();
     }
 
     private void syncOtherLayersToActive(int activeIndex) {
         for (int l = 0; l < layerFrames.length; l++) {
-            if (l == activeLayer) continue;
+            if (l == activeLayer)
+                continue;
             List<FrameData> lf = layerFrames[l];
-            if (lf == null || lf.isEmpty()) continue;
+            if (lf == null || lf.isEmpty())
+                continue;
             currentFrameIndex[l] = activeIndex % lf.size();
         }
     }
 
-    private FrameData captureFrameForLayer(int layer) {
+    FrameData captureFrameForLayer(int layer) {
         return new FrameData(canvas.getLayerCopy(layer));
     }
 
     private void saveCurrentFrames() {
-        if (layerFrames == null || currentFrameIndex == null) return;
+        if (layerFrames == null || currentFrameIndex == null)
+            return;
         int layers = Math.min(canvas.getLayerCount(), layerFrames.length);
         for (int l = 0; l < layers; l++) {
             List<FrameData> frames = layerFrames[l];
-            if (frames.isEmpty()) continue;
+            if (frames.isEmpty())
+                continue;
             int idx = Math.max(0, Math.min(currentFrameIndex[l], frames.size() - 1));
             frames.set(idx, captureFrameForLayer(l));
         }
     }
 
-    private void resetAnimationState() {
-        if (playTimer != null) playTimer.stop();
+    void resetAnimationState() {
+        if (playTimer != null)
+            playTimer.stop();
         playing = false;
         playCursor = 0;
         onionEnabled = false;
         initLayerFrames(canvas != null ? canvas.getLayerCount() : 3);
-        if (layerNames == null) layerNames = new String[animatedLayers.length];
+        if (layerNames == null)
+            layerNames = new String[animatedLayers.length];
         ensureLayerNamesSize(animatedLayers.length);
         Arrays.fill(animatedLayers, true);
         if (timeline != null) {
             timeline.setVisible(false);
             timeline.repaint();
         }
-        if (southWrap != null) southWrap.revalidate();
+        if (southWrap != null)
+            southWrap.revalidate();
     }
 
-    private FrameData createEmptyFrameForLayer(int layer) {
+    FrameData createEmptyFrameForLayer(int layer) {
         int rows = canvas.getRows();
         int cols = canvas.getColumns();
         Color[][] data = new Color[rows][cols];
         return new FrameData(data);
     }
 
-    private void applyFrameForLayer(int layer, FrameData data) {
-        if (data == null) return;
+    void applyFrameForLayer(int layer, FrameData data) {
+        if (data == null)
+            return;
         canvas.setLayer(layer, data.layer);
-        if (controlBar != null) controlBar.repaint();
+        if (controlBar != null)
+            controlBar.repaint();
         canvas.repaint();
     }
 
-    private void applyAllCurrentFrames() {
+    void applyAllCurrentFrames() {
         for (int l = 0; l < layerFrames.length; l++) {
             List<FrameData> frames = layerFrames[l];
-            if (frames.isEmpty()) continue;
+            if (frames.isEmpty())
+                continue;
             int idx = Math.max(0, Math.min(currentFrameIndex[l], frames.size() - 1));
             FrameData fd = frames.get(idx);
             applyFrameForLayer(l, fd);
@@ -1508,9 +1592,11 @@ public class PixelArtApp {
 
     Color[][][] getOnionComposite() {
         ensureFrameCapacity();
-        if (!onionEnabled) return null;
+        if (!onionEnabled)
+            return null;
         List<FrameData> frames = layerFrames[activeLayer];
-        if (frames.size() < 2) return null;
+        if (frames.size() < 2)
+            return null;
         int idx = Math.max(0, Math.min(currentFrameIndex[activeLayer], frames.size() - 1));
         int prevIdx = (idx - 1 + frames.size()) % frames.size();
         int nextIdx = (idx + 1) % frames.size();
@@ -1522,11 +1608,12 @@ public class PixelArtApp {
         Color[][] nextComposite = new Color[rows][cols];
         compositeFrame(prev.layer, prevComposite);
         compositeFrame(next.layer, nextComposite);
-        return new Color[][][]{prevComposite, nextComposite};
+        return new Color[][][] { prevComposite, nextComposite };
     }
 
     private void compositeFrame(Color[][] layerData, Color[][] out) {
-        if (layerData == null || out == null) return;
+        if (layerData == null || out == null)
+            return;
         int rows = out.length;
         int cols = out[0].length;
         for (int r = 0; r < rows; r++) {
@@ -1537,7 +1624,8 @@ public class PixelArtApp {
     }
 
     private Color[][] cloneLayer(Color[][] src) {
-        if (src == null) return null;
+        if (src == null)
+            return null;
         Color[][] copy = new Color[src.length][];
         for (int r = 0; r < src.length; r++) {
             copy[r] = Arrays.copyOf(src[r], src[r].length);
@@ -1546,7 +1634,8 @@ public class PixelArtApp {
     }
 
     private Color[][] scaleLayer(Color[][] src, int factor) {
-        if (src == null) return null;
+        if (src == null)
+            return null;
         int oldRows = src.length;
         int oldCols = src[0].length;
         int newRows = oldRows * factor;
@@ -1567,23 +1656,26 @@ public class PixelArtApp {
         arr[i] = arr[j];
         arr[j] = tmp;
     }
+
     private void swapInt(int[] arr, int i, int j) {
         int tmp = arr[i];
         arr[i] = arr[j];
         arr[j] = tmp;
     }
+
     private void swapBoolean(boolean[] arr, int i, int j) {
         boolean tmp = arr[i];
         arr[i] = arr[j];
         arr[j] = tmp;
     }
+
     private void swapString(String[] arr, int i, int j) {
         String tmp = arr[i];
         arr[i] = arr[j];
         arr[j] = tmp;
     }
 
-    private int delayFromFPS() {
+    int delayFromFPS() {
         return (int) Math.max(1, Math.round(1000.0 / Math.max(1, frameRate)));
     }
 
@@ -1594,21 +1686,53 @@ public class PixelArtApp {
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("RIGHT"), "panRight");
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("UP"), "panUp");
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("DOWN"), "panDown");
-        root.getActionMap().put("panLeft", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(-step, 0); } });
-        root.getActionMap().put("panRight", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(step, 0); } });
-        root.getActionMap().put("panUp", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(0, -step); } });
-        root.getActionMap().put("panDown", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { if (console != null && console.isFocused()) return; canvasHolder.pan(0, step); } });
+        root.getActionMap().put("panLeft", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused())
+                    return;
+                canvasHolder.pan(-step, 0);
+            }
+        });
+        root.getActionMap().put("panRight", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused())
+                    return;
+                canvasHolder.pan(step, 0);
+            }
+        });
+        root.getActionMap().put("panUp", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused())
+                    return;
+                canvasHolder.pan(0, -step);
+            }
+        });
+        root.getActionMap().put("panDown", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused())
+                    return;
+                canvasHolder.pan(0, step);
+            }
+        });
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("OPEN_BRACKET"), "brushDec");
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("CLOSE_BRACKET"), "brushInc");
         root.getActionMap().put("brushDec", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) {
-                if (console != null && console.isFocused()) return;
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused())
+                    return;
                 setBrushSize(Math.max(1, getBrushSize() - 1));
             }
         });
         root.getActionMap().put("brushInc", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) {
-                if (console != null && console.isFocused()) return;
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused())
+                    return;
                 setBrushSize(getBrushSize() + 1);
             }
         });
@@ -1616,29 +1740,36 @@ public class PixelArtApp {
 
     private void installFrameStepper(JFrame frame) {
         JComponent root = frame.getRootPane();
-        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_COMMA, 0), "prevFrame");
-        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_PERIOD, 0), "nextFrame");
-        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_O, 0), "toggleOnion");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_COMMA, 0), "prevFrame");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_PERIOD, 0), "nextFrame");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_O, 0),
+                "toggleOnion");
         root.getActionMap().put("prevFrame", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (console != null && console.isFocused()) return;
+                if (console != null && console.isFocused())
+                    return;
                 stepFrame(-1);
             }
         });
         root.getActionMap().put("nextFrame", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (console != null && console.isFocused()) return;
+                if (console != null && console.isFocused())
+                    return;
                 stepFrame(1);
             }
         });
         root.getActionMap().put("toggleOnion", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (console != null && console.isFocused()) return;
+                if (console != null && console.isFocused())
+                    return;
                 toggleOnion();
-                if (timeline != null) timeline.repaint();
+                if (timeline != null)
+                    timeline.repaint();
             }
         });
     }
@@ -1674,12 +1805,13 @@ public class PixelArtApp {
 
     static class FrameData implements Serializable {
         final Color[][] layer;
+
         FrameData(Color[][] layer) {
             this.layer = layer;
         }
     }
 
-    private static class ProjectData implements Serializable {
+    static class ProjectData implements Serializable {
         int cols;
         int rows;
         int cellSize;
