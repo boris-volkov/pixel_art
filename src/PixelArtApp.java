@@ -78,12 +78,7 @@ public class PixelArtApp {
     private String[] layerNames = new String[]{"L1", "L2", "L3"};
     private int frameRate = 6; // fps
     private Color viewportBg = BG;
-    private int red = 32;
-    private int green = 32;
-    private int blue = 32;
-    private int hueDegrees = 0;
-    private int satPercent = 0;
-    private int briPercent = 0;
+    private final ColorState colorState = new ColorState();
     private int brushSize = 1;
     private int gridSize = 128;
     private int canvasCellSize = computeMaxCellSizeForScreen();
@@ -225,7 +220,7 @@ public class PixelArtApp {
     }
 
     Color currentBrushColor() {
-        return new Color(red, green, blue);
+        return colorState.getColor();
     }
 
     void updateBrushTargets() {
@@ -254,15 +249,7 @@ public class PixelArtApp {
 
     void setBrushColor(Color color) {
         if (color == null) return;
-        float[] hsb = Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), null);
-        if (hsb[1] > 1e-4f) {
-            hueDegrees = (Math.round(hsb[0] * 360f) % 360 + 360) % 360;
-        }
-        satPercent = clampPercent(Math.round(hsb[1] * 100f));
-        briPercent = clampPercent(Math.round(hsb[2] * 100f));
-        red = clamp(color.getRed());
-        green = clamp(color.getGreen());
-        blue = clamp(color.getBlue());
+        colorState.setFromColor(color);
         updateBrushTargets(color);
         if (controlBar != null) controlBar.syncSliders();
     }
@@ -295,10 +282,11 @@ public class PixelArtApp {
     }
 
     void adjustBrushBrightnessGlobal(int delta) {
-        red = clamp(red + delta);
-        green = clamp(green + delta);
-        blue = clamp(blue + delta);
-        updateBrushTargets();
+        Color c = currentBrushColor();
+        int r = clamp(c.getRed() + delta);
+        int g = clamp(c.getGreen() + delta);
+        int b = clamp(c.getBlue() + delta);
+        setBrushColor(new Color(r, g, b));
         if (controlBar != null) controlBar.syncSliders();
     }
 
@@ -408,23 +396,8 @@ public class PixelArtApp {
         if (controlBar != null) controlBar.syncSliders();
     }
 
-    private void applyHSB() {
-        float h = ((hueDegrees % 360) + 360) % 360 / 360f;
-        float s = clampPercent(satPercent) / 100f;
-        float b = clampPercent(briPercent) / 100f;
-        Color c = Color.getHSBColor(h, s, b);
-        red = clamp(c.getRed());
-        green = clamp(c.getGreen());
-        blue = clamp(c.getBlue());
-        updateBrushTargets(c);
-        if (controlBar != null) controlBar.syncSliders();
-    }
-
     private void syncHSBFromRGB() {
-        float[] hsb = Color.RGBtoHSB(red, green, blue, null);
-        hueDegrees = (Math.round(hsb[0] * 360f) % 360 + 360) % 360;
-        satPercent = clampPercent(Math.round(hsb[1] * 100f));
-        briPercent = clampPercent(Math.round(hsb[2] * 100f));
+        colorState.setFromColor(colorState.getColor());
     }
 
     private void autoBrushIfColorControl() {
@@ -917,9 +890,9 @@ public class PixelArtApp {
         data.currentFrameIndex = currentFrameIndex.clone();
         data.activeLayer = activeLayer;
         data.brushSize = brushSize;
-        data.red = red;
-        data.green = green;
-        data.blue = blue;
+        data.red = colorState.getRed();
+        data.green = colorState.getGreen();
+        data.blue = colorState.getBlue();
         data.frameRate = frameRate;
         data.viewportBg = viewportBg;
         data.layerFrames = new ArrayList<>();
@@ -955,9 +928,8 @@ public class PixelArtApp {
             animatedLayers = Arrays.copyOf(data.animatedLayers, data.layerFrames.size());
             currentFrameIndex = Arrays.copyOf(data.currentFrameIndex, data.layerFrames.size());
             brushSize = data.brushSize;
-            red = data.red;
-            green = data.green;
-            blue = data.blue;
+            colorState.setFromColor(new Color(data.red, data.green, data.blue));
+            updateBrushTargets(colorState.getColor());
             frameRate = data.frameRate;
             activeLayer = Math.max(0, Math.min(data.activeLayer, data.layerFrames.size() - 1));
             initLayerFrames(data.layerFrames.size());
@@ -1152,53 +1124,53 @@ public class PixelArtApp {
         }
     }
 
-    int getRed() { return red; }
-    int getGreen() { return green; }
-    int getBlue() { return blue; }
+    int getRed() { return colorState.getRed(); }
+    int getGreen() { return colorState.getGreen(); }
+    int getBlue() { return colorState.getBlue(); }
     void setRed(int v) {
-        red = clamp(v);
-        syncHSBFromRGB();
+        colorState.setRed(v);
         updateBrushTargets();
         autoBrushIfColorControl();
         if (controlBar != null) controlBar.syncSliders();
     }
     void setGreen(int v) {
-        green = clamp(v);
-        syncHSBFromRGB();
+        colorState.setGreen(v);
         updateBrushTargets();
         autoBrushIfColorControl();
         if (controlBar != null) controlBar.syncSliders();
     }
     void setBlue(int v) {
-        blue = clamp(v);
-        syncHSBFromRGB();
+        colorState.setBlue(v);
         updateBrushTargets();
         autoBrushIfColorControl();
         if (controlBar != null) controlBar.syncSliders();
     }
     int getHueDegrees() {
-        return ((hueDegrees % 360) + 360) % 360;
+        return colorState.getHue();
     }
     int getSaturationPercent() {
-        return clampPercent(satPercent);
+        return colorState.getSaturation();
     }
     int getBrightnessPercent() {
-        return clampPercent(briPercent);
+        return colorState.getBrightness();
     }
     void setSaturationPercent(int percent) {
-        satPercent = clampPercent(percent);
-        applyHSB();
+        colorState.setSaturation(percent);
+        updateBrushTargets(colorState.getColor());
         autoBrushIfColorControl();
+        if (controlBar != null) controlBar.syncSliders();
     }
     void setBrightnessPercent(int percent) {
-        briPercent = clampPercent(percent);
-        applyHSB();
+        colorState.setBrightness(percent);
+        updateBrushTargets(colorState.getColor());
         autoBrushIfColorControl();
+        if (controlBar != null) controlBar.syncSliders();
     }
     void setHueDegrees(int deg) {
-        hueDegrees = ((deg % 360) + 360) % 360;
-        applyHSB();
+        colorState.setHue(deg);
+        updateBrushTargets(colorState.getColor());
         autoBrushIfColorControl();
+        if (controlBar != null) controlBar.syncSliders();
     }
     int getBrushSize() { return brushSize; }
     void setBrushSize(int size) { onBrushSizeChanged(size); if (canvas != null) canvas.setBrushSize(size); }
