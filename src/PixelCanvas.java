@@ -745,21 +745,22 @@ class PixelCanvas extends javax.swing.JPanel {
             }
         }
 
-        // Onion skin overlay above current layers so it is visible
+        // Onion skin overlay with tinting for prev/next
         if (onionSupplier != null) {
             Color[][][] onions = onionSupplier.get();
             if (onions != null) {
-                int alpha1 = 160;
-                int alpha2 = 100;
+                Color tintPrev = new Color(255, 100, 200, 60); // magenta-ish, lighter
+                Color tintNext = new Color(100, 200, 255, 60); // cyan-ish, lighter
                 for (int idx = 0; idx < onions.length; idx++) {
                     Color[][] onion = onions[idx];
                     if (onion == null) continue;
-                    int useAlpha = (idx == 0) ? alpha1 : alpha2;
+                    Color tint = (idx == 0) ? tintPrev : tintNext;
                     for (int r = 0; r < rows; r++) {
                         for (int c = 0; c < columns; c++) {
                             Color oc = onion[r][c];
                             if (oc != null) {
-                                g2.setColor(new Color(oc.getRed(), oc.getGreen(), oc.getBlue(), useAlpha));
+                                // Apply tint while respecting original alpha via overlay
+                                g2.setColor(new Color(tint.getRed(), tint.getGreen(), tint.getBlue(), tint.getAlpha()));
                                 g2.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
                             }
                         }

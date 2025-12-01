@@ -34,34 +34,34 @@ class AnimationPanel extends JComponent {
 
     private void handleClick(int x, int y) {
         if (playBounds != null && playBounds.contains(x, y)) {
-            app.togglePlayback();
+            app.blurConsole(); app.togglePlayback();
             repaint();
             return;
         }
         if (onionBounds != null && onionBounds.contains(x, y)) {
-            app.toggleOnion();
+            app.blurConsole(); app.toggleOnion();
             repaint();
             return;
         }
         if (addBounds != null && addBounds.contains(x, y)) {
-            app.addBlankFrame();
+            app.blurConsole(); app.addBlankFrame();
             repaint();
             return;
         }
         if (deleteBounds != null && deleteBounds.contains(x, y)) {
-            app.deleteCurrentFrame();
+            app.blurConsole(); app.deleteCurrentFrame();
             repaint();
             return;
         }
         if (dupBounds != null && dupBounds.contains(x, y)) {
-            app.duplicateCurrentFrame();
+            app.blurConsole(); app.duplicateCurrentFrame();
             repaint();
             return;
         }
         for (int i = 0; i < frameRects.size(); i++) {
             Rectangle r = frameRects.get(i);
             if (r.contains(x, y)) {
-                app.selectFrame(i);
+                app.blurConsole(); app.selectFrame(i);
                 repaint();
                 break;
             }
@@ -75,6 +75,8 @@ class AnimationPanel extends JComponent {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setColor(PixelArtApp.BG);
         g2.fillRect(0, 0, getWidth(), getHeight());
+        g2.setColor(new Color(90, 180, 90));
+        g2.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
 
         int padding = 8;
         int btnWidth = 60;

@@ -180,6 +180,7 @@ public class PixelArtApp {
         });
         installConsoleToggle(frame);
         installPanKeys(frame);
+        installFrameStepper(frame);
 
         frame.pack();
         enterFullScreen(frame);
@@ -637,7 +638,7 @@ public class PixelArtApp {
                     timeline.setVisible(true);
                     southWrap.revalidate();
                 }
-                console.setStatus("Animation panel open for " + getLayerName(activeLayer));
+                console.setStatus("Animation panel open");
                 break;
             case "framerate":
                 if (parts.length < 2) {
@@ -1400,6 +1401,22 @@ public class PixelArtApp {
         if (timeline != null) timeline.repaint();
     }
 
+    void stepFrame(int delta) {
+        ensureFrameCapacity();
+        if (layerFrames == null || activeLayer < 0 || activeLayer >= layerFrames.length) return;
+        List<FrameData> frames = layerFrames[activeLayer];
+        if (frames == null || frames.isEmpty()) return;
+        saveCurrentFrames();
+        int size = frames.size();
+        int next = (currentFrameIndex[activeLayer] + delta) % size;
+        if (next < 0) next += size;
+        currentFrameIndex[activeLayer] = next;
+        playCursor = next;
+        syncOtherLayersToActive(next);
+        applyAllCurrentFrames();
+        if (timeline != null) timeline.repaint();
+    }
+
     void togglePlayback() {
         boolean anyFrames = false;
         for (List<FrameData> lf : layerFrames) {
@@ -1623,6 +1640,45 @@ public class PixelArtApp {
                 setBrushSize(getBrushSize() + 1);
             }
         });
+    }
+
+    private void installFrameStepper(JFrame frame) {
+        JComponent root = frame.getRootPane();
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_COMMA, 0), "prevFrame");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_PERIOD, 0), "nextFrame");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_O, 0), "toggleOnion");
+        root.getActionMap().put("prevFrame", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused()) return;
+                stepFrame(-1);
+            }
+        });
+        root.getActionMap().put("nextFrame", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused()) return;
+                stepFrame(1);
+            }
+        });
+        root.getActionMap().put("toggleOnion", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocused()) return;
+                toggleOnion();
+                if (timeline != null) timeline.repaint();
+            }
+        });
+    }
+
+    void blurConsole() {
+        if (console != null && console.isFocusOwner()) {
+            console.setFocusable(false);
+            if (canvasHolder != null) {
+                canvasHolder.requestFocusInWindow();
+            }
+            console.setFocusable(true);
+        }
     }
 
     private void installConsoleToggle(JFrame frame) {
