@@ -68,6 +68,7 @@ public class SwingPixelArtView implements PixelArtView {
         stampSlot.setOpaque(false);
         animationSlot = new JPanel(new BorderLayout());
         animationSlot.setOpaque(false);
+        animationSlot.setVisible(false);
         console = new ConsolePanel(cmd -> {
         }); // placeholder; will be replaced
         topBar = null; // Will be set later
@@ -502,7 +503,7 @@ public class SwingPixelArtView implements PixelArtView {
             animationSlot.repaint();
         }
         if (timeline != null) {
-            timeline.setVisible(true);
+            timeline.setVisible(animationSlot.isVisible());
         }
     }
 

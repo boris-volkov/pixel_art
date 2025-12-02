@@ -694,7 +694,7 @@ class PixelCanvas extends javax.swing.JPanel {
         // Save current state to redo stack
         pushRedoSnapshot();
         Color[][][] prev = undoStack.pop();
-        moveSnapshot = null;
+        moveState = null;
         for (int l = 0; l < layerCount; l++) {
             for (int r = 0; r < rows; r++) {
                 System.arraycopy(prev[l][r], 0, layers[l][r], 0, columns);
@@ -713,7 +713,7 @@ class PixelCanvas extends javax.swing.JPanel {
         }
         pushUndoSnapshot();
         Color[][][] next = redoStack.pop();
-        moveSnapshot = null;
+        moveState = null;
         for (int l = 0; l < layerCount; l++) {
             for (int r = 0; r < rows; r++) {
                 System.arraycopy(next[l][r], 0, layers[l][r], 0, columns);

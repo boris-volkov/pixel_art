@@ -229,7 +229,7 @@ public class PixelArtController {
         };
         animationPanel = new AnimationPanel(host);
         view.setAnimationController(animationPanel);
-        view.showAnimationPanel(true);
+        view.showAnimationPanel(false);
     }
 
     private void handleCommand(String input) {
@@ -255,14 +255,8 @@ public class PixelArtController {
                     }
                 }
                 case "resolution" -> view.setConsoleStatus(model.getColumns() + "x" + model.getRows());
-                case "brush" -> {
-                    if (parts.length < 2) {
-                        view.setConsoleStatus("Usage: brush <size>");
-                        return;
-                    }
-                    int size = Integer.parseInt(parts[1]);
-                    setBrushSize(size);
-                    view.setConsoleStatus("Brush " + size);
+                case "help" -> {
+                    view.setConsoleStatus("Commands: new | load | save | save-sequence | save-gif | save-project | load-project | animate | background | resolution | exit");
                 }
             case "animate" -> {
                 view.showAnimationPanel(true);
@@ -385,7 +379,8 @@ public class PixelArtController {
     }
 
     public void loadImage(String path) throws IOException {
-        fileHandler.loadImage(path);
+        fileHandler.loadImage(path, this);
+        repaintTimeline();
     }
 
     public void saveImage(String path) throws IOException {
@@ -397,7 +392,7 @@ public class PixelArtController {
     }
 
     public void saveGif(String path) throws IOException {
-        fileHandler.saveGif(path);
+        fileHandler.saveGif(path, model.getFrameRate());
     }
 
     public void saveProject(String path) throws IOException {
@@ -405,7 +400,7 @@ public class PixelArtController {
     }
 
     public void loadProject(String path) throws IOException, ClassNotFoundException {
-        fileHandler.loadProject(path);
+        fileHandler.loadProject(path, this);
     }
 
     // Tool operations
@@ -553,9 +548,11 @@ public class PixelArtController {
 
     // Layers
     public void setActiveLayer(int layer) {
+        recordUndoSnapshot();
         model.saveCurrentFrames();
         int clamped = Math.max(0, Math.min(model.getLayerCount() - 1, layer));
         model.setActiveLayer(clamped);
+        clearUndoStacks();
         syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
         view.repaintCanvas();
@@ -622,6 +619,7 @@ public class PixelArtController {
     public void stepFrame(int delta) {
         model.saveCurrentFrames();
         model.stepFrame(delta);
+        clearUndoStacks();
         model.applyAllCurrentFrames();
         view.repaintCanvas();
         view.repaintControls();
@@ -632,6 +630,7 @@ public class PixelArtController {
         model.saveCurrentFrames();
         model.selectFrame(index);
         syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
+        clearUndoStacks();
         model.applyAllCurrentFrames();
         view.repaintCanvas();
         view.repaintControls();
@@ -641,6 +640,7 @@ public class PixelArtController {
     public void addFrameFromCurrent() {
         model.saveCurrentFrames();
         model.addFrameFromCurrent();
+        clearUndoStacks();
         syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
         view.repaintCanvas();
@@ -651,6 +651,7 @@ public class PixelArtController {
     public void addBlankFrame() {
         model.saveCurrentFrames();
         model.addBlankFrame();
+        clearUndoStacks();
         syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
         view.repaintCanvas();
@@ -661,6 +662,7 @@ public class PixelArtController {
     public void duplicateCurrentFrame() {
         model.saveCurrentFrames();
         model.duplicateCurrentFrame();
+        clearUndoStacks();
         syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
         view.repaintCanvas();
@@ -670,6 +672,7 @@ public class PixelArtController {
 
     public void deleteCurrentFrame() {
         model.deleteCurrentFrame();
+        clearUndoStacks();
         syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
         view.repaintCanvas();
@@ -801,6 +804,7 @@ public class PixelArtController {
         copyInto(model.getLayers(), prev);
         view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     public void performRedo() {
@@ -811,6 +815,7 @@ public class PixelArtController {
         copyInto(model.getLayers(), next);
         view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     private int computeCellSizeForGrid(int grid) {
@@ -839,6 +844,7 @@ public class PixelArtController {
     }
 
     private void pushUndoSnapshot() {
+        model.saveCurrentFrames();
         undoStack.push(cloneLayers(model.getLayers()));
         while (undoStack.size() > UNDO_LIMIT) {
             undoStack.removeLast();
@@ -846,10 +852,16 @@ public class PixelArtController {
     }
 
     private void pushRedoSnapshot() {
+        model.saveCurrentFrames();
         redoStack.push(cloneLayers(model.getLayers()));
         while (redoStack.size() > UNDO_LIMIT) {
             redoStack.removeLast();
         }
+    }
+
+    private void clearUndoStacks() {
+        undoStack.clear();
+        redoStack.clear();
     }
 
     private Color[][][] cloneLayers(Color[][][] src) {
