@@ -287,11 +287,11 @@ public class PixelArtController {
                     view.setConsoleStatus("Save-seq failed: " + ex.getMessage());
                 }
             }
-            case "save-gif" -> {
-                if (parts.length < 2) {
-                    view.setConsoleStatus("Usage: save-gif <file.gif>");
-                    break;
-                }
+                case "save-gif" -> {
+                    if (parts.length < 2) {
+                        view.setConsoleStatus("Usage: save-gif <file.gif>");
+                        break;
+                    }
                 try {
                     fileHandler.saveGif(parts[1], model.getFrameRate());
                     view.setConsoleStatus("GIF saved to " + parts[1]);
@@ -347,6 +347,23 @@ public class PixelArtController {
                     int b = clamp(Integer.parseInt(parts[3]));
                     setViewportBackground(new Color(r, g, b));
                     view.setConsoleStatus("Background set");
+                }
+                case "resample" -> {
+                    if (parts.length < 2) {
+                        view.setConsoleStatus("Usage: resample <factor>");
+                        return;
+                    }
+                    try {
+                        int factor = Integer.parseInt(parts[1]);
+                        if (factor <= 1) {
+                            view.setConsoleStatus("Factor must be > 1");
+                            return;
+                        }
+                        resampleCanvas(factor);
+                        view.setConsoleStatus("Resampled x" + factor);
+                    } catch (NumberFormatException ex) {
+                        view.setConsoleStatus("Factor must be a number");
+                    }
                 }
                 case "exit" -> System.exit(0);
                 default -> view.setConsoleStatus("Unknown command: " + cmd);
@@ -465,8 +482,37 @@ public class PixelArtController {
     }
 
     public void resampleCanvas(int factor) {
-        // Implement resampling
+        if (factor <= 1) return;
+        recordUndoSnapshot();
+        model.saveCurrentFrames();
+        int oldRows = model.getRows();
+        int oldCols = model.getColumns();
+        int newRows = oldRows * factor;
+        int newCols = oldCols * factor;
+        int newGrid = Math.max(newRows, newCols);
+        Color[][][] scaledLayers = new Color[model.getLayerCount()][newRows][newCols];
+        for (int l = 0; l < model.getLayerCount(); l++) {
+            Color[][] src = model.getLayers()[l];
+            Color[][] dest = new Color[newRows][newCols];
+            for (int r = 0; r < newRows; r++) {
+                int sr = Math.min(oldRows - 1, r / factor);
+                for (int c = 0; c < newCols; c++) {
+                    int sc = Math.min(oldCols - 1, c / factor);
+                    dest[r][c] = src[sr][sc];
+                }
+            }
+            scaledLayers[l] = dest;
+        }
+        model.setGridSize(newGrid);
+        model.setCanvasCellSize(Math.min(model.getCanvasCellSize(), PixelConstants.MAX_CELL_SIZE));
+        model.setLayers(scaledLayers);
+        model.saveCurrentFrames();
+        buildCanvas();
+        view.setCanvasCellSize(model.getCanvasCellSize());
+        view.recenterViewport();
         view.repaintCanvas();
+        view.repaintControls();
+        repaintTimeline();
     }
 
     public void applyAllCurrentFrames() {
