@@ -119,11 +119,11 @@ public class PixelArtController {
             @Override
             public PixelArtApp.ToolMode getToolMode() { return model.getToolMode(); }
             @Override
-            public void setActiveLayer(int idx) { setActiveLayer(idx); }
+            public void setActiveLayer(int idx) { PixelArtController.this.setActiveLayer(idx); }
             @Override
-            public void toggleLayerVisibility(int idx) { toggleLayerVisibility(idx); }
+            public void toggleLayerVisibility(int idx) { PixelArtController.this.toggleLayerVisibility(idx); }
             @Override
-            public void swapLayerUp(int idx) { swapLayerUp(idx); }
+            public void swapLayerUp(int idx) { PixelArtController.this.swapLayerUp(idx); }
             @Override
             public PixelCanvas getCanvas() { return canvas; }
             @Override
@@ -422,7 +422,8 @@ public class PixelArtController {
 
     // Layers
     public void setActiveLayer(int layer) {
-        model.setActiveLayer(layer);
+        int clamped = Math.max(0, Math.min(model.getLayerCount() - 1, layer));
+        model.setActiveLayer(clamped);
         view.repaintControls();
     }
 
@@ -433,9 +434,13 @@ public class PixelArtController {
     public void toggleLayerVisibility(int layer) {
         model.toggleLayerVisibility(layer);
         view.repaintCanvas();
+        view.repaintControls();
     }
 
     public void swapLayerUp(int idx) {
+        if (idx <= 0 || idx >= model.getLayerCount()) {
+            return;
+        }
         model.swapLayers(idx, idx - 1);
         if (model.getActiveLayer() == idx)
             model.setActiveLayer(idx - 1);
