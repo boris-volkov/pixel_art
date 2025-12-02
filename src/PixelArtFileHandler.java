@@ -18,14 +18,13 @@ import javax.imageio.metadata.IIOMetadataNode;
 import javax.imageio.stream.ImageOutputStream;
 
 public class PixelArtFileHandler {
-    private PixelArtApp app;
+    private PixelArtModel model;
 
-    public PixelArtFileHandler(PixelArtApp app) {
-        this.app = app;
+    public PixelArtFileHandler(PixelArtModel model) {
+        this.model = model;
     }
 
-    public void loadImage(String path) throws IOException {
-        app.resetAnimationState();
+    public void loadImage(String path, PixelArtController controller) throws IOException {
         BufferedImage img = ImageIO.read(new File(path));
         if (img == null)
             throw new IOException("Unsupported image");
@@ -34,30 +33,40 @@ public class PixelArtFileHandler {
         if (w != h) {
             throw new IOException("Image must be square");
         }
-        app.gridSize = w;
-        app.canvasCellSize = Math.min(PixelArtApp.MAX_CELL_SIZE, Math.max(2, app.canvasCellSize));
-        PixelCanvas newCanvas = new PixelCanvas(w, h, app.canvasCellSize, app::pickBrushColor, app::setBrushSize,
-                app::getToolMode, app::getStampPixels, app::getOnionComposite, app::getActiveLayer, 3,
-                app::isLayerVisible, null, false, () -> app.recordUndo(PixelArtApp.CanvasTarget.MAIN));
+        controller.rebuildCanvas(w, h);
+        Color[][][] layers = model.getLayers();
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int argb = img.getRGB(x, y);
                 Color c = new Color(argb, true);
-                newCanvas.setPixelDirect(y, x, c);
+                layers[0][y][x] = c;
             }
         }
-        newCanvas.setCurrentColor(app.currentBrushColor());
-        newCanvas.setBrushSize(app.brushSize);
-        app.canvas = newCanvas;
-        app.canvasHolder.setCanvas(newCanvas);
-        app.setCanvasCellSize(app.computeMaxCellSizeForScreen());
-        app.syncHSBFromRGB();
-        if (app.controlBar != null)
-            app.controlBar.syncSliders();
+        // persist into frame data so applyAllCurrentFrames won't wipe the pixels
+        model.saveCurrentFrames();
+        controller.applyAllCurrentFrames();
     }
 
     public void saveImage(String path) throws IOException {
-        BufferedImage img = app.canvas.toImage();
+        BufferedImage img = new BufferedImage(model.getColumns(), model.getRows(), BufferedImage.TYPE_INT_ARGB);
+        for (int r = 0; r < model.getRows(); r++) {
+            for (int c = 0; c < model.getColumns(); c++) {
+                Color color = null;
+                for (int l = model.getLayerCount() - 1; l >= 0; l--) {
+                    Color[][] layer = model.getLayers()[l];
+                    Color cc = layer[r][c];
+                    if (cc != null) {
+                        color = cc;
+                        break;
+                    }
+                }
+                if (color == null) {
+                    img.setRGB(c, r, 0x00000000);
+                } else {
+                    img.setRGB(c, r, color.getRGB());
+                }
+            }
+        }
         File file = new File(path);
         String format = "png";
         int dot = path.lastIndexOf('.');
@@ -68,17 +77,16 @@ public class PixelArtFileHandler {
     }
 
     public void saveSequence(String basePath) throws IOException {
-        app.ensureFrameCapacity();
-        int layerCount = app.canvas.getLayerCount();
+        model.saveCurrentFrames();
+        int layerCount = model.getLayerCount();
         int maxFrames = 0;
-        for (List<PixelArtApp.FrameData> lf : app.layerFrames) {
+        for (List<PixelArtModel.FrameData> lf : model.getLayerFrames()) {
             if (lf != null) {
                 maxFrames = Math.max(maxFrames, lf.size());
             }
         }
         if (maxFrames <= 0) {
-            app.console.setStatus("No frames to save");
-            return;
+            throw new IOException("No frames to save");
         }
         String format = "png";
         int dot = basePath.lastIndexOf('.');
@@ -96,15 +104,14 @@ public class PixelArtFileHandler {
         if (!outDir.exists() && !outDir.mkdirs()) {
             throw new IOException("Could not create directory " + outDir.getAbsolutePath());
         }
-        saveCurrentFrames();
         int digits = Math.max(3, String.valueOf(maxFrames).length());
         for (int i = 0; i < maxFrames; i++) {
             Color[][][] snapshot = new Color[layerCount][][];
             for (int l = 0; l < layerCount; l++) {
-                List<PixelArtApp.FrameData> lf = app.layerFrames[l];
+                List<PixelArtModel.FrameData> lf = model.getLayerFrames()[l];
                 if (lf.isEmpty())
                     continue;
-                PixelArtApp.FrameData fd = lf.get(i % lf.size());
+                PixelArtModel.FrameData fd = lf.get(i % lf.size());
                 snapshot[l] = fd.layer;
             }
             BufferedImage img = toImage(snapshot);
@@ -112,128 +119,57 @@ public class PixelArtFileHandler {
             String outName = new File(outDir, prefixFileName(dirName, idx, format)).getPath();
             ImageIO.write(img, format, new File(outName));
         }
-        applyAllCurrentFrames();
     }
 
-    public void saveGif(String path) throws IOException {
-        app.ensureFrameCapacity();
-        int layerCount = app.canvas.getLayerCount();
+    public void saveGif(String path, int frameRate) throws IOException {
+        model.saveCurrentFrames();
+        int layerCount = model.getLayerCount();
         int lcm = 1;
-        for (List<PixelArtApp.FrameData> lf : app.layerFrames) {
+        for (List<PixelArtModel.FrameData> lf : model.getLayerFrames()) {
             int len = lf.size();
             if (len > 0) {
                 lcm = lcm(lcm, len);
             }
         }
         if (lcm <= 0) {
-            app.console.setStatus("No frames to save");
-            return;
+            throw new IOException("No frames to save");
         }
-        saveCurrentFrames();
-        int delayCs = Math.max(1, (int) Math.round(100.0 / Math.max(1, app.frameRate)));
+        int delayCs = Math.max(1, (int) Math.round(100.0 / Math.max(1, frameRate)));
         List<BufferedImage> framesOut = new ArrayList<>();
         for (int i = 0; i < lcm; i++) {
             Color[][][] snapshot = new Color[layerCount][][];
             for (int l = 0; l < layerCount; l++) {
-                List<PixelArtApp.FrameData> lf = app.layerFrames[l];
+                List<PixelArtModel.FrameData> lf = model.getLayerFrames()[l];
                 if (lf.isEmpty())
                     continue;
-                PixelArtApp.FrameData fd = lf.get(i % lf.size());
+                PixelArtModel.FrameData fd = lf.get(i % lf.size());
                 snapshot[l] = fd.layer;
             }
             framesOut.add(toImage(snapshot));
         }
         writeGif(framesOut, delayCs, path);
-        applyAllCurrentFrames();
     }
 
     public void saveProject(String path) throws IOException {
-        app.ensureFrameCapacity();
-        PixelArtApp.ProjectData data = new PixelArtApp.ProjectData();
-        data.cols = app.canvas.getColumns();
-        data.rows = app.canvas.getRows();
-        data.cellSize = app.canvasCellSize;
-        data.layerNames = app.layerNames.clone();
-        data.layerVisible = app.layerVisible.clone();
-        data.animatedLayers = app.animatedLayers.clone();
-        data.currentFrameIndex = app.currentFrameIndex.clone();
-        data.activeLayer = app.activeLayer;
-        data.brushSize = app.brushSize;
-        data.red = app.colorState.getRed();
-        data.green = app.colorState.getGreen();
-        data.blue = app.colorState.getBlue();
-        data.frameRate = app.frameRate;
-        data.viewportBg = app.viewportBg;
-        data.layerFrames = new ArrayList<>();
-        for (List<PixelArtApp.FrameData> lf : app.layerFrames) {
-            List<Color[][]> saved = new ArrayList<>();
-            for (PixelArtApp.FrameData fd : lf) {
-                saved.add(cloneLayer(fd.layer));
-            }
-            data.layerFrames.add(saved);
-        }
+        model.saveCurrentFrames();
+        PixelArtModel.ProjectData data = model.toProjectData();
         try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(path))) {
             oos.writeObject(data);
         }
     }
 
-    public void loadProject(String path) throws IOException, ClassNotFoundException {
-        if (app.playTimer != null)
-            app.playTimer.stop();
-        app.playing = false;
+    public void loadProject(String path, PixelArtController controller) throws IOException, ClassNotFoundException {
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
-            PixelArtApp.ProjectData data = (PixelArtApp.ProjectData) ois.readObject();
-            app.gridSize = Math.max(data.cols, data.rows);
-            app.canvasCellSize = Math.min(PixelArtApp.MAX_CELL_SIZE, Math.max(2, data.cellSize));
-            PixelCanvas newCanvas = new PixelCanvas(data.cols, data.rows, app.canvasCellSize, app::pickBrushColor,
-                    app::setBrushSize, app::getToolMode, app::getStampPixels, app::getOnionComposite,
-                    app::getActiveLayer, data.layerFrames.size(), app::isLayerVisible, null, false,
-                    () -> app.recordUndo(PixelArtApp.CanvasTarget.MAIN));
-            app.canvas = newCanvas;
-            app.canvasHolder.setCanvas(newCanvas);
-            app.viewportBg = data.viewportBg != null ? data.viewportBg : PixelArtApp.BG;
-            app.canvasHolder.setBackground(app.viewportBg);
-            app.ensureLayerNamesSize(data.layerNames.length);
-            System.arraycopy(data.layerNames, 0, app.layerNames, 0,
-                    Math.min(app.layerNames.length, data.layerNames.length));
-            for (int i = 0; i < Math.min(app.layerVisible.length, data.layerVisible.length); i++) {
-                app.layerVisible[i] = data.layerVisible[i];
-            }
-            app.animatedLayers = Arrays.copyOf(data.animatedLayers, data.layerFrames.size());
-            app.currentFrameIndex = Arrays.copyOf(data.currentFrameIndex, data.layerFrames.size());
-            app.brushSize = data.brushSize;
-            app.colorState.setFromColor(new Color(data.red, data.green, data.blue));
-            app.updateBrushTargets(app.colorState.getColor());
-            app.frameRate = data.frameRate;
-            app.activeLayer = Math.max(0, Math.min(data.activeLayer, data.layerFrames.size() - 1));
-            app.initLayerFrames(data.layerFrames.size());
-            for (int l = 0; l < data.layerFrames.size(); l++) {
-                List<Color[][]> saved = data.layerFrames.get(l);
-                List<PixelArtApp.FrameData> dest = app.layerFrames[l];
-                dest.clear();
-                for (Color[][] layer : saved) {
-                    dest.add(new PixelArtApp.FrameData(cloneLayer(layer)));
-                }
-                if (dest.isEmpty()) {
-                    dest.add(app.createEmptyFrameForLayer(l));
-                }
-            }
-            app.applyAllCurrentFrames();
-            app.updateBrushTargets(app.currentBrushColor());
-            app.canvas.setBrushSize(app.brushSize);
-            app.syncHSBFromRGB();
-            if (app.controlBar != null)
-                app.controlBar.syncSliders();
-            if (app.timeline != null)
-                app.timeline.repaint();
-            if (app.topBar != null)
-                app.topBar.repaint();
+            PixelArtModel.ProjectData data = (PixelArtModel.ProjectData) ois.readObject();
+            model.fromProjectData(data);
+            controller.refreshViewFromModel();
+            controller.applyAllCurrentFrames();
         }
     }
 
     private BufferedImage toImage(Color[][][] layerData) {
-        int rows = app.canvas.getRows();
-        int cols = app.canvas.getColumns();
+        int rows = model.getRows();
+        int cols = model.getColumns();
         BufferedImage img = new BufferedImage(cols, rows, BufferedImage.TYPE_INT_ARGB);
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
@@ -312,30 +248,6 @@ public class PixelArtFileHandler {
 
     private String prefixFileName(String base, String idx, String format) {
         return base + idx + "." + format;
-    }
-
-    private void saveCurrentFrames() {
-        if (app.layerFrames == null || app.currentFrameIndex == null)
-            return;
-        int layers = Math.min(app.canvas.getLayerCount(), app.layerFrames.length);
-        for (int l = 0; l < layers; l++) {
-            List<PixelArtApp.FrameData> frames = app.layerFrames[l];
-            if (frames.isEmpty())
-                continue;
-            int idx = Math.max(0, Math.min(app.currentFrameIndex[l], frames.size() - 1));
-            frames.set(idx, app.captureFrameForLayer(l));
-        }
-    }
-
-    private void applyAllCurrentFrames() {
-        for (int l = 0; l < app.layerFrames.length; l++) {
-            List<PixelArtApp.FrameData> frames = app.layerFrames[l];
-            if (frames.isEmpty())
-                continue;
-            int idx = Math.max(0, Math.min(app.currentFrameIndex[l], frames.size() - 1));
-            PixelArtApp.FrameData fd = frames.get(idx);
-            app.applyFrameForLayer(l, fd);
-        }
     }
 
     private Color[][] cloneLayer(Color[][] src) {

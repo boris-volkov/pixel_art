@@ -34,6 +34,8 @@ public class SwingPixelArtView implements PixelArtView {
     private Supplier<Boolean> panBlockCallback;
     private Runnable undoCallback;
     private Runnable redoCallback;
+    private IntConsumer frameStepCallback;
+    private Runnable toggleOnionCallback;
 
     // Controllers
     private PixelCanvas canvasController;
@@ -218,7 +220,8 @@ public class SwingPixelArtView implements PixelArtView {
             public void actionPerformed(ActionEvent e) {
                 if (console != null && console.isFocusOwner())
                     return;
-                // Implement step frame -1
+                if (frameStepCallback != null)
+                    frameStepCallback.accept(-1);
             }
         });
         root.getActionMap().put("nextFrame", new AbstractAction() {
@@ -226,7 +229,8 @@ public class SwingPixelArtView implements PixelArtView {
             public void actionPerformed(ActionEvent e) {
                 if (console != null && console.isFocusOwner())
                     return;
-                // Implement step frame +1
+                if (frameStepCallback != null)
+                    frameStepCallback.accept(1);
             }
         });
         root.getActionMap().put("toggleOnion", new AbstractAction() {
@@ -234,9 +238,8 @@ public class SwingPixelArtView implements PixelArtView {
             public void actionPerformed(ActionEvent e) {
                 if (console != null && console.isFocusOwner())
                     return;
-                // Implement toggle onion
-                if (canvasController != null)
-                    canvasController.repaint();
+                if (toggleOnionCallback != null)
+                    toggleOnionCallback.run();
             }
         });
     }
@@ -416,6 +419,16 @@ public class SwingPixelArtView implements PixelArtView {
     @Override
     public void setRedoCallback(Runnable callback) {
         this.redoCallback = callback;
+    }
+
+    @Override
+    public void setFrameStepCallback(IntConsumer callback) {
+        this.frameStepCallback = callback;
+    }
+
+    @Override
+    public void setToggleOnionCallback(Runnable callback) {
+        this.toggleOnionCallback = callback;
     }
 
     @Override

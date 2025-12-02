@@ -55,6 +55,8 @@ public interface PixelArtView {
 
     void setUndoCallback(Runnable callback);
     void setRedoCallback(Runnable callback);
+    void setFrameStepCallback(IntConsumer callback);
+    void setToggleOnionCallback(Runnable callback);
 
     // Controllers
     void setCanvasController(Object canvasController); // PixelCanvas

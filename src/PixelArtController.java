@@ -24,7 +24,7 @@ public class PixelArtController {
     public PixelArtController(PixelArtModel model, PixelArtView view) {
         this.model = model;
         this.view = view;
-        // this.fileHandler = new PixelArtFileHandler(model, view);
+        this.fileHandler = new PixelArtFileHandler(model);
         setupViewCallbacks();
         normalizeColorState();
         model.setCanvasCellSize(computeMaxCellSizeForScreen());
@@ -52,6 +52,8 @@ public class PixelArtController {
         view.setPanBlockCallback(() -> false); // Implement if needed
         view.setUndoCallback(this::performUndo);
         view.setRedoCallback(this::performRedo);
+        view.setFrameStepCallback(this::stepFrame);
+        view.setToggleOnionCallback(this::toggleOnion);
     }
 
     private void buildCanvas() {
@@ -261,11 +263,85 @@ public class PixelArtController {
                     setBrushSize(size);
                     view.setConsoleStatus("Brush " + size);
                 }
-                case "animate" -> {
-                    view.showAnimationPanel(true);
-                    repaintTimeline();
-                    view.setConsoleStatus("Animation panel open");
+            case "animate" -> {
+                view.showAnimationPanel(true);
+                repaintTimeline();
+                view.setConsoleStatus("Animation panel open");
+            }
+            case "save" -> {
+                if (parts.length < 2) {
+                    view.setConsoleStatus("Usage: save <file.png>");
+                    break;
                 }
+                try {
+                    fileHandler.saveImage(parts[1]);
+                    view.setConsoleStatus("Saved " + parts[1]);
+                } catch (IOException ex) {
+                    view.setConsoleStatus("Save failed: " + ex.getMessage());
+                }
+            }
+            case "save-sequence" -> {
+                if (parts.length < 2) {
+                    view.setConsoleStatus("Usage: save-sequence <base.png>");
+                    break;
+                }
+                try {
+                    fileHandler.saveSequence(parts[1]);
+                    view.setConsoleStatus("Saved sequence for " + parts[1]);
+                } catch (IOException ex) {
+                    view.setConsoleStatus("Save-seq failed: " + ex.getMessage());
+                }
+            }
+            case "save-gif" -> {
+                if (parts.length < 2) {
+                    view.setConsoleStatus("Usage: save-gif <file.gif>");
+                    break;
+                }
+                try {
+                    fileHandler.saveGif(parts[1], model.getFrameRate());
+                    view.setConsoleStatus("GIF saved to " + parts[1]);
+                } catch (IOException ex) {
+                    view.setConsoleStatus("Save-gif failed: " + ex.getMessage());
+                }
+            }
+            case "save-project" -> {
+                if (parts.length < 2) {
+                    view.setConsoleStatus("Usage: save-project <file>");
+                    break;
+                }
+                try {
+                    fileHandler.saveProject(parts[1]);
+                    view.setConsoleStatus("Project saved to " + parts[1]);
+                } catch (IOException ex) {
+                    view.setConsoleStatus("Save-project failed: " + ex.getMessage());
+                }
+            }
+            case "load" -> {
+                if (parts.length < 2) {
+                    view.setConsoleStatus("Usage: load <file.png>");
+                    break;
+                }
+                try {
+                    fileHandler.loadImage(parts[1], this);
+                    view.setConsoleStatus("Loaded " + parts[1]);
+                    repaintTimeline();
+                } catch (IOException ex) {
+                    view.setConsoleStatus("Load failed: " + ex.getMessage());
+                }
+            }
+            case "load-project" -> {
+                if (parts.length < 2) {
+                    view.setConsoleStatus("Usage: load-project <file>");
+                    break;
+                }
+                try {
+                    fileHandler.loadProject(parts[1], this);
+                    view.setConsoleStatus("Project loaded from " + parts[1]);
+                    repaintTimeline();
+                } catch (IOException | ClassNotFoundException ex) {
+                    view.setConsoleStatus("Load-project failed: " + ex.getMessage());
+                }
+            }
                 case "background" -> {
                     if (parts.length < 4) {
                         view.setConsoleStatus("Usage: background <r> <g> <b>");
@@ -296,6 +372,15 @@ public class PixelArtController {
         view.setCanvasCellSize(model.getCanvasCellSize());
         view.recenterViewport();
         view.repaintControls();
+    }
+
+    public void refreshViewFromModel() {
+        buildCanvas();
+        view.setCanvasCellSize(model.getCanvasCellSize());
+        view.recenterViewport();
+        view.updateBrushTargets(model.getCurrentBrushColor());
+        syncColorControls();
+        repaintTimeline();
     }
 
     public void loadImage(String path) throws IOException {
@@ -388,6 +473,13 @@ public class PixelArtController {
         view.repaintCanvas();
     }
 
+    public void applyAllCurrentFrames() {
+        model.applyAllCurrentFrames();
+        view.repaintCanvas();
+        view.repaintControls();
+        repaintTimeline();
+    }
+
     // Color and brush
     public void pickBrushColor(Color color) {
         model.getColorState().setFromColor(color);
@@ -460,6 +552,7 @@ public class PixelArtController {
 
     // Layers
     public void setActiveLayer(int layer) {
+        model.saveCurrentFrames();
         int clamped = Math.max(0, Math.min(model.getLayerCount() - 1, layer));
         model.setActiveLayer(clamped);
         syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
