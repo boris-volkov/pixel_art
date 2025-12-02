@@ -27,18 +27,15 @@ Lightweight Java/Swing pixel editor with retro UI, per-layer animation timelines
 - `load <file.png>` — load a square PNG into the canvas.
 - `new <size>` or `new <w> <h>` — create a new blank canvas.
 - `resolution` — print current canvas dimensions.
-- `flip h|v` — flip horizontally or vertically.
 - `blur gaussian <radius>` — apply Gaussian blur to the active layer.
 - `blur motion <angleDeg> <amount>` — motion blur (angle uses standard trig orientation).
 - `dither floyd` | `dither ordered` — apply dithering.
 - `resample <factor>` — scale the canvas and all frames by an integer factor (>1).
+- `color <r> <g> <b>` - manually set the brush color.
 - `background <r> <g> <b>` — set viewport background color (to preview sprites over a flat color).
-- `calc <expr>` — simple Lisp-style math, e.g., `calc (+ 1 2)` or `calc (* (+ 1 2) 3)`.
-- `animate [layer]` — open the animation panel (optionally set the active layer by name or L#).
+- `animate` — open the animation panel.
 - `framerate <fps>` — set playback/export fps.
-- `duplicate` — duplicate the current frame (inserts after the current one).
 - `rename L# <name>` — rename a layer.
-- `onion` — toggle onion skinning.
 - `exit` — quit.
 
 ## Tips
