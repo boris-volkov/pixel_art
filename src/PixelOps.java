@@ -1,6 +1,9 @@
 import java.awt.Color;
 import java.util.ArrayDeque;
 
+// Uses PixelConstants for shared colors/clamp.
+import PixelConstants;
+
 /**
  * Pixel-level operations that mutate a single layer in-place.
  * These are UI-agnostic helpers shared by canvas/controller.
@@ -132,9 +135,9 @@ class PixelOps {
                     }
                 }
                 if (weightSum > 0) {
-                    int nr = PixelArtApp.clamp((int) Math.round(accR / weightSum));
-                    int ng = PixelArtApp.clamp((int) Math.round(accG / weightSum));
-                    int nb = PixelArtApp.clamp((int) Math.round(accB / weightSum));
+                    int nr = PixelConstants.clamp((int) Math.round(accR / weightSum));
+                    int ng = PixelConstants.clamp((int) Math.round(accG / weightSum));
+                    int nb = PixelConstants.clamp((int) Math.round(accB / weightSum));
                     next[row][col] = new Color(nr, ng, nb);
                 } else {
                     next[row][col] = null;
@@ -175,9 +178,9 @@ class PixelOps {
                     samples++;
                 }
                 if (samples > 0) {
-                    int nr = PixelArtApp.clamp((int) Math.round(accR / samples));
-                    int ng = PixelArtApp.clamp((int) Math.round(accG / samples));
-                    int nb = PixelArtApp.clamp((int) Math.round(accB / samples));
+                    int nr = PixelConstants.clamp((int) Math.round(accR / samples));
+                    int ng = PixelConstants.clamp((int) Math.round(accG / samples));
+                    int nb = PixelConstants.clamp((int) Math.round(accB / samples));
                     out[r][c] = new Color(nr, ng, nb);
                 }
             }
@@ -194,7 +197,7 @@ class PixelOps {
         double[][] errR = new double[rows][cols];
         double[][] errG = new double[rows][cols];
         double[][] errB = new double[rows][cols];
-        Color bg = background != null ? background : PixelArtApp.CANVAS_BG;
+        Color bg = background != null ? background : PixelConstants.CANVAS_BG;
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < cols; x++) {
                 Color src = layer[y][x];
@@ -228,7 +231,7 @@ class PixelOps {
                 { 15, 7, 13, 5 }
         };
         int step = 255 / (DITHER_LEVELS - 1);
-        Color bg = background != null ? background : PixelArtApp.CANVAS_BG;
+        Color bg = background != null ? background : PixelConstants.CANVAS_BG;
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < cols; x++) {
                 Color src = layer[y][x];
@@ -317,10 +320,10 @@ class PixelOps {
                     }
                 }
                 if (colorWeight > 0 && totalWeight > 0) {
-                    int nr = PixelArtApp.clamp((int) Math.round(accR / colorWeight));
-                    int ng = PixelArtApp.clamp((int) Math.round(accG / colorWeight));
-                    int nb = PixelArtApp.clamp((int) Math.round(accB / colorWeight));
-                    int na = PixelArtApp.clamp((int) Math.round(255 * (colorWeight / totalWeight)));
+                    int nr = PixelConstants.clamp((int) Math.round(accR / colorWeight));
+                    int ng = PixelConstants.clamp((int) Math.round(accG / colorWeight));
+                    int nb = PixelConstants.clamp((int) Math.round(accB / colorWeight));
+                    int na = PixelConstants.clamp((int) Math.round(255 * (colorWeight / totalWeight)));
                     if (na == 0) {
                         layer[rr][cc] = null;
                     } else {

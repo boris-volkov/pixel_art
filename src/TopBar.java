@@ -7,6 +7,8 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
+import PixelConstants;
+
 class TopBar extends JComponent {
     interface Host {
         Color currentBrushColor();
@@ -15,10 +17,6 @@ class TopBar extends JComponent {
 
     private final Host app;
     private final Rectangle[] swatchRects = new Rectangle[9];
-
-    TopBar(PixelArtApp app) {
-        this(new PixelArtAppHost(app));
-    }
 
     TopBar(Host app) {
         this.app = app;
@@ -41,24 +39,6 @@ class TopBar extends JComponent {
         });
     }
 
-    private static class PixelArtAppHost implements Host {
-        private final PixelArtApp app;
-
-        PixelArtAppHost(PixelArtApp app) {
-            this.app = app;
-        }
-
-        @Override
-        public Color currentBrushColor() {
-            return app.currentBrushColor();
-        }
-
-        @Override
-        public void pickBrushColor(Color color) {
-            app.pickBrushColor(color);
-        }
-    }
-
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
@@ -72,7 +52,7 @@ class TopBar extends JComponent {
 
         g2.setColor(base);
         g2.fillRect(mainX, mainY, mainSize, mainSize);
-        g2.setColor(PixelArtApp.BUTTON_BORDER);
+        g2.setColor(PixelConstants.BUTTON_BORDER);
         g2.drawRect(mainX, mainY, mainSize, mainSize);
 
         int smallSize = 26;
@@ -94,21 +74,21 @@ class TopBar extends JComponent {
             swatchRects[idxTop] = rTop;
             g2.setColor(palette[idxTop]);
             g2.fillRect(rTop.x, rTop.y, rTop.width, rTop.height);
-            g2.setColor(PixelArtApp.BUTTON_BORDER);
+            g2.setColor(PixelConstants.BUTTON_BORDER);
             g2.drawRect(rTop.x, rTop.y, rTop.width, rTop.height);
 
             Rectangle rMid = new Rectangle(x, yMid, smallSize, smallSize);
             swatchRects[idxMid] = rMid;
             g2.setColor(palette[idxMid]);
             g2.fillRect(rMid.x, rMid.y, rMid.width, rMid.height);
-            g2.setColor(PixelArtApp.BUTTON_BORDER);
+            g2.setColor(PixelConstants.BUTTON_BORDER);
             g2.drawRect(rMid.x, rMid.y, rMid.width, rMid.height);
 
             Rectangle rBot = new Rectangle(x, yBottom, smallSize, smallSize);
             swatchRects[idxBottom] = rBot;
             g2.setColor(palette[idxBottom]);
             g2.fillRect(rBot.x, rBot.y, rBot.width, rBot.height);
-            g2.setColor(PixelArtApp.BUTTON_BORDER);
+            g2.setColor(PixelConstants.BUTTON_BORDER);
             g2.drawRect(rBot.x, rBot.y, rBot.width, rBot.height);
         }
 

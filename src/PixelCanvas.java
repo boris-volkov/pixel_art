@@ -17,6 +17,9 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
+import PixelConstants;
+import ToolMode;
+
 class PixelCanvas extends javax.swing.JPanel {
     private final int columns;
     private final int rows;
@@ -28,7 +31,7 @@ class PixelCanvas extends javax.swing.JPanel {
     private final int undoLimit = 30;
     private final java.util.function.Consumer<Color> pickCallback;
     private final IntConsumer brushChangeCallback;
-    private final Supplier<PixelArtApp.ToolMode> modeSupplier;
+    private final Supplier<ToolMode> modeSupplier;
     private final Supplier<Color[][]> stampSupplier;
     private final Supplier<Color[][][]> onionSupplier;
     private final IntSupplier activeLayerSupplier;
@@ -51,7 +54,7 @@ class PixelCanvas extends javax.swing.JPanel {
     private boolean stampUsesOwnColors = true;
 
     PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback,
-                IntConsumer brushChangeCallback, Supplier<PixelArtApp.ToolMode> modeSupplier,
+                IntConsumer brushChangeCallback, Supplier<ToolMode> modeSupplier,
                 Supplier<Color[][]> stampSupplier, Supplier<Color[][][]> onionSupplier,
                 IntSupplier activeLayerSupplier, int layerCount,
                 IntPredicate layerVisiblePredicate, java.util.function.BooleanSupplier panBlocker,
@@ -61,7 +64,7 @@ class PixelCanvas extends javax.swing.JPanel {
     }
 
     PixelCanvas(int columns, int rows, int cellSize, java.util.function.Consumer<Color> pickCallback,
-                IntConsumer brushChangeCallback, Supplier<PixelArtApp.ToolMode> modeSupplier,
+                IntConsumer brushChangeCallback, Supplier<ToolMode> modeSupplier,
                 Supplier<Color[][]> stampSupplier, Supplier<Color[][][]> onionSupplier,
                 IntSupplier activeLayerSupplier, int layerCount,
                 IntPredicate layerVisiblePredicate, java.util.function.BooleanSupplier panBlocker,
@@ -189,11 +192,11 @@ class PixelCanvas extends javax.swing.JPanel {
                 constrainStroke = e.isShiftDown();
                 anchorCol = toCell(e.getX());
                 anchorRow = toCell(e.getY());
-                PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
-                if (mode == PixelArtApp.ToolMode.MOVE) {
+                ToolMode mode = modeSupplier != null ? modeSupplier.get() : ToolMode.BRUSH;
+                if (mode == ToolMode.MOVE) {
                     beginMove(anchorCol, anchorRow);
                     return;
-                } else if (mode == PixelArtApp.ToolMode.ROTATE) {
+                } else if (mode == ToolMode.ROTATE) {
                     beginRotate(anchorCol, anchorRow);
                     return;
                 }
@@ -210,11 +213,11 @@ class PixelCanvas extends javax.swing.JPanel {
                 if (panBlocker != null && panBlocker.getAsBoolean()) {
                     return;
                 }
-                PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
-                if (mode == PixelArtApp.ToolMode.MOVE) {
+                ToolMode mode = modeSupplier != null ? modeSupplier.get() : ToolMode.BRUSH;
+                if (mode == ToolMode.MOVE) {
                     applyMove(toCell(e.getX()), toCell(e.getY()));
                     return;
-                } else if (mode == PixelArtApp.ToolMode.ROTATE) {
+                } else if (mode == ToolMode.ROTATE) {
                     applyRotate(toCell(e.getX()), toCell(e.getY()));
                     return;
                 }
@@ -255,7 +258,7 @@ class PixelCanvas extends javax.swing.JPanel {
     private void paintAt(int x, int y) {
         int column = toCell(x);
         int row = toCell(y);
-        PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
+        ToolMode mode = modeSupplier != null ? modeSupplier.get() : ToolMode.BRUSH;
         if (constrainStroke && anchorCol >= 0 && anchorRow >= 0) {
             int dx = column - anchorCol;
             int dy = row - anchorRow;
@@ -265,7 +268,7 @@ class PixelCanvas extends javax.swing.JPanel {
                 column = anchorCol;
             }
         }
-        boolean isStamp = mode == PixelArtApp.ToolMode.STAMP;
+        boolean isStamp = mode == ToolMode.STAMP;
         if (!isStamp && (column < 0 || column >= columns || row < 0 || row >= rows)) {
             return;
         }
@@ -285,11 +288,11 @@ class PixelCanvas extends javax.swing.JPanel {
     }
 
     private void applyBrush(int column, int row) {
-        PixelArtApp.ToolMode mode = modeSupplier != null ? modeSupplier.get() : PixelArtApp.ToolMode.BRUSH;
+        ToolMode mode = modeSupplier != null ? modeSupplier.get() : ToolMode.BRUSH;
         applyBrush(column, row, mode);
     }
 
-    private void applyBrush(int column, int row, PixelArtApp.ToolMode mode) {
+    private void applyBrush(int column, int row, ToolMode mode) {
         switch (mode) {
             case STAMP:
                 if (stampSupplier != null) applyStamp(column, row);
@@ -303,7 +306,7 @@ class PixelCanvas extends javax.swing.JPanel {
             default:
                 break;
         }
-        boolean erase = (mode == PixelArtApp.ToolMode.ERASER);
+        boolean erase = (mode == ToolMode.ERASER);
 
         int half = brushSize / 2;
         int startCol = column - half;
@@ -510,7 +513,7 @@ class PixelCanvas extends javax.swing.JPanel {
                     int y = Math.max(0, startRow) * cellSize;
                     int w = (Math.min(columns - 1, endCol) - Math.max(0, startCol) + 1) * cellSize;
                     int h = (Math.min(rows - 1, endRow) - Math.max(0, startRow) + 1) * cellSize;
-                    g2.setColor(new Color(PixelArtApp.ACCENT.getRed(), PixelArtApp.ACCENT.getGreen(), PixelArtApp.ACCENT.getBlue(), 180));
+                    g2.setColor(new Color(PixelConstants.ACCENT.getRed(), PixelConstants.ACCENT.getGreen(), PixelConstants.ACCENT.getBlue(), 180));
                     g2.setStroke(new BasicStroke(2f));
                     g2.drawRect(x, y, w - 1, h - 1);
                 }
@@ -526,7 +529,7 @@ class PixelCanvas extends javax.swing.JPanel {
                 int w = (endCol - startCol + 1) * cellSize;
                 int h = (endRow - startRow + 1) * cellSize;
 
-                g2.setColor(new Color(PixelArtApp.ACCENT.getRed(), PixelArtApp.ACCENT.getGreen(), PixelArtApp.ACCENT.getBlue(), 140));
+                g2.setColor(new Color(PixelConstants.ACCENT.getRed(), PixelConstants.ACCENT.getGreen(), PixelConstants.ACCENT.getBlue(), 140));
                 g2.setStroke(new BasicStroke(2f));
                 g2.drawRect(x, y, w - 1, h - 1);
             }
@@ -557,12 +560,12 @@ class PixelCanvas extends javax.swing.JPanel {
         }
 
         // Outline canvas bounds
-        g2.setColor(PixelArtApp.BUTTON_BORDER);
+        g2.setColor(PixelConstants.BUTTON_BORDER);
         g2.drawRect(0, 0, columns * cellSize - 1, rows * cellSize - 1);
 
         // Stamp hint overlay
         if (stampSurface && stampPristine) {
-            g2.setColor(new Color(PixelArtApp.TEXT.getRed(), PixelArtApp.TEXT.getGreen(), PixelArtApp.TEXT.getBlue(), 160));
+            g2.setColor(new Color(PixelConstants.TEXT.getRed(), PixelConstants.TEXT.getGreen(), PixelConstants.TEXT.getBlue(), 160));
             String[] lines = {"DRAW", "STAMP", "HERE"};
             int lineHeight = 10 * 2; // approx using scale 2
             int totalHeight = lines.length * lineHeight;
@@ -593,10 +596,10 @@ class PixelCanvas extends javax.swing.JPanel {
             if (outA >= 0.999) break;
         }
         if (outA <= 0) return null;
-        int alpha = PixelArtApp.clamp((int) Math.round(outA * 255.0));
-        int r = PixelArtApp.clamp((int) Math.round(outR / outA));
-        int g = PixelArtApp.clamp((int) Math.round(outG / outA));
-        int b = PixelArtApp.clamp((int) Math.round(outB / outA));
+        int alpha = PixelConstants.clamp((int) Math.round(outA * 255.0));
+        int r = PixelConstants.clamp((int) Math.round(outR / outA));
+        int g = PixelConstants.clamp((int) Math.round(outG / outA));
+        int b = PixelConstants.clamp((int) Math.round(outB / outA));
         return new Color(r, g, b, alpha);
     }
 
@@ -758,7 +761,7 @@ class PixelCanvas extends javax.swing.JPanel {
     }
 
     private boolean isStampMode() {
-        return modeSupplier != null && modeSupplier.get() == PixelArtApp.ToolMode.STAMP;
+        return modeSupplier != null && modeSupplier.get() == ToolMode.STAMP;
     }
 
     private int computeStampScale(int stampCols, int stampRows) {

@@ -2,14 +2,14 @@
 
 Lightweight Java/Swing pixel editor with retro UI, per-layer animation timelines, and console commands.
 
-## Running
+## Running (new MVC path)
 1. Install a JDK (11+ recommended).
 2. From the repo root:
    ```sh
    javac -d out src/*.java
-   java -cp out PixelArtApp
+   java -cp out PixelArtLauncher
    ```
-   (You can also `javac src/*.java && java -cp src PixelArtApp` since there are no packages.)
+   (The legacy `PixelArtApp` has been removed; use `PixelArtLauncher`.)
 
 ## UI quick tour
 - **Canvas**: paint pixels; Alt-click picks a color; Shift constrains strokes; Arrow keys pan when the console isn’t focused; `Ctrl+Z` undo.
@@ -50,29 +50,18 @@ Lightweight Java/Swing pixel editor with retro UI, per-layer animation timelines
 ## Files
 
 ### Root Directory
-- **README.md**: This file, containing project description, running instructions, UI tour, console commands, and tips.
-- **.gitignore**: Git ignore file to exclude certain files and directories from version control.
-- **LICENSE**: License file specifying the terms under which the project can be used.
-- **witch.png**: Sample image file, possibly used as an example or icon in the project.
-- **src/**: Directory containing all Java source code files.
+- **README.md**: This file.
+- **.gitignore**
+- **LICENSE**
+- **witch.png**: Sample sprite.
+- **src/**: Java sources (no packages).
 
 ### Source Code (src/)
-- **PixelArtApp.java**: Main application class that initializes the GUI, handles user interactions, manages the overall application state, and contains the entry point.
-- **PixelArtController.java**: Controller class intended to mediate between the model and view (currently incomplete with placeholder implementations).
-- **PixelArtModel.java**: Model class that holds the core data structures including layers, animation frames, colors, and canvas state.
-- **PixelArtView.java**: Interface defining the contract for view implementations in the pixel art editor.
-- **SwingPixelArtView.java**: Swing-based implementation of the PixelArtView interface, providing the graphical user interface components.
-- **PixelCanvas.java**: Custom JPanel component responsible for rendering the pixel canvas, handling mouse input, tool operations, and undo/redo functionality.
-- **PixelArtFileHandler.java**: Utility class for handling file operations such as saving and loading images, projects, GIF animations, and sequences.
-- **PixelArtAnimationHandler.java**: Class managing animation playback, frame manipulation, and timeline controls.
-- **ActionButton.java**: Custom button component used for various action triggers in the UI.
-- **AnimationPanel.java**: Panel component for displaying and controlling animation timelines and frame navigation.
-- **CanvasViewport.java**: Viewport component that manages the display and scrolling of the pixel canvas.
-- **ColorState.java**: Class managing color state including RGB and HSB color representations and conversions.
-- **ConsolePanel.java**: Panel implementing the command console for text-based user input and output.
-- **ControlBar.java**: UI component containing controls for tools, brush settings, and layer management.
-- **FocusWrap.java**: Utility class for managing focus behavior in UI components.
-- **PixelFont.java**: Custom font rendering class for displaying text in a pixel art style.
-- **SliderControl.java**: Custom slider component for adjusting numerical values like brush size and color components.
-- **StampPanel.java**: Panel for managing the stamp tool, including preview and editing of stamp patterns.
-- **TopBar.java**: Top-level bar component with additional controls and menus.
+- **PixelArtLauncher.java**: Entry point for the new MVC architecture.
+- **PixelArtModel.java**: Core state (layers, frames, colors, viewport, tool, brush).
+- **PixelArtController.java**: Mediates model/view, tools, animation, file commands.
+- **PixelArtView.java** / **SwingPixelArtView.java**: View contract and Swing implementation.
+- **PixelCanvas.java**: Canvas view, renders model layers, forwards input via callbacks.
+- **PixelArtFileHandler.java**: Save/load image, sequence, GIF, project using the model.
+- **ToolMode.java**, **PixelConstants.java**: Shared enums/constants.
+- **UI components**: ControlBar, TopBar, StampPanel, AnimationPanel, ConsolePanel, ActionButton, SliderControl, CanvasViewport, FocusWrap, PixelFont, ColorState.

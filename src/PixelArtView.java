@@ -6,6 +6,8 @@ import java.util.function.IntPredicate;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
+import ToolMode;
+
 public interface PixelArtView {
     // Lifecycle
     void initialize();
@@ -41,7 +43,7 @@ public interface PixelArtView {
 
     void setBrushSizeCallback(IntConsumer callback);
 
-    void setToolModeCallback(Supplier<PixelArtApp.ToolMode> callback);
+    void setToolModeCallback(Supplier<ToolMode> callback);
 
     void setStampCallback(Supplier<Color[][]> callback);
 

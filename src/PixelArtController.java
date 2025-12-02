@@ -4,6 +4,9 @@ import java.awt.Toolkit;
 import java.io.IOException;
 import javax.swing.Timer;
 
+import PixelConstants;
+import ToolMode;
+
 public class PixelArtController {
     private final PixelArtModel model;
     private final PixelArtView view;
@@ -122,9 +125,9 @@ public class PixelArtController {
             @Override
             public void setCanvasCellSize(int v) { setCanvasCellSizeValue(v); }
             @Override
-            public void setToolMode(PixelArtApp.ToolMode mode) { model.setToolMode(mode); }
+            public void setToolMode(ToolMode mode) { model.setToolMode(mode); }
             @Override
-            public PixelArtApp.ToolMode getToolMode() { return model.getToolMode(); }
+            public ToolMode getToolMode() { return model.getToolMode(); }
             @Override
             public void setActiveLayer(int idx) { PixelArtController.this.setActiveLayer(idx); }
             @Override
@@ -170,8 +173,8 @@ public class PixelArtController {
                 stampCellSize,
                 this::pickBrushColor,
                 this::setBrushSize,
-                () -> model.getToolMode() == PixelArtApp.ToolMode.ERASER ? PixelArtApp.ToolMode.ERASER
-                        : PixelArtApp.ToolMode.BRUSH,
+                () -> model.getToolMode() == ToolMode.ERASER ? ToolMode.ERASER
+                        : ToolMode.BRUSH,
                 null,
                 null,
                 () -> 0,
@@ -452,7 +455,7 @@ public class PixelArtController {
         recordUndoSnapshot();
         model.saveCurrentFrames();
         Color[][] layer = model.getLayerCopy(model.getActiveLayer());
-        PixelOps.ditherFloydSteinberg(layer, PixelArtApp.CANVAS_BG);
+        PixelOps.ditherFloydSteinberg(layer, PixelConstants.CANVAS_BG);
         model.setLayer(model.getActiveLayer(), layer);
         model.applyAllCurrentFrames();
         view.repaintCanvas();
@@ -462,7 +465,7 @@ public class PixelArtController {
         recordUndoSnapshot();
         model.saveCurrentFrames();
         Color[][] layer = model.getLayerCopy(model.getActiveLayer());
-        PixelOps.ditherOrdered(layer, PixelArtApp.CANVAS_BG);
+        PixelOps.ditherOrdered(layer, PixelConstants.CANVAS_BG);
         model.setLayer(model.getActiveLayer(), layer);
         model.applyAllCurrentFrames();
         view.repaintCanvas();
@@ -819,7 +822,7 @@ public class PixelArtController {
 
     private int computeMaxCellSizeForScreen() {
         Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-        int usableWidth = Math.max(200, (int) screen.getWidth() - PixelArtApp.CONTROL_BAR_WIDTH - 200);
+        int usableWidth = Math.max(200, (int) screen.getWidth() - PixelConstants.CONTROL_BAR_WIDTH - 200);
         int usableHeight = Math.max(200, (int) screen.getHeight() - 200);
         int cols = Math.max(1, model.getColumns());
         int rows = Math.max(1, model.getRows());

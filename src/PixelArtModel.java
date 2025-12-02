@@ -27,7 +27,7 @@ public class PixelArtModel implements Serializable {
     // Tools and state
     private ColorState colorState = new ColorState();
     private int brushSize = 1;
-    private PixelArtApp.ToolMode toolMode = PixelArtApp.ToolMode.BRUSH;
+    private ToolMode toolMode = ToolMode.BRUSH;
     private int activeLayer = 0;
     private boolean stampUseOwnColors = true;
 
@@ -35,7 +35,7 @@ public class PixelArtModel implements Serializable {
     private Color[][] stampPixels; // 16x16
 
     // Viewport
-    private Color viewportBg = PixelArtApp.BG;
+    private Color viewportBg = PixelConstants.BG;
 
     // Serialization data
     public static class ProjectData implements Serializable {
@@ -206,11 +206,11 @@ public class PixelArtModel implements Serializable {
         this.brushSize = size;
     }
 
-    public PixelArtApp.ToolMode getToolMode() {
+    public ToolMode getToolMode() {
         return toolMode;
     }
 
-    public void setToolMode(PixelArtApp.ToolMode mode) {
+    public void setToolMode(ToolMode mode) {
         this.toolMode = mode;
     }
 

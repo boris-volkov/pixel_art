@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import PixelConstants;
+
 class ConsolePanel extends JComponent {
     private final Consumer<String> commandHandler;
     private final List<String> history = new ArrayList<>();
@@ -41,7 +43,7 @@ class ConsolePanel extends JComponent {
     ConsolePanel(Consumer<String> commandHandler) {
         this.commandHandler = commandHandler;
         setOpaque(true);
-        setBackground(PixelArtApp.BG);
+        setBackground(PixelConstants.BG);
         setPreferredSize(new java.awt.Dimension(0, 70));
         setFocusable(true);
         addMouseListener(new MouseAdapter() {
@@ -139,17 +141,17 @@ class ConsolePanel extends JComponent {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setColor(PixelArtApp.BG);
+        g2.setColor(PixelConstants.BG);
         g2.fillRect(0, 0, getWidth(), getHeight());
 
         int padding = 10;
         int lineHeight = 12;
         Rectangle statusBounds = new Rectangle(padding, padding, getWidth() - padding * 2, lineHeight + 6);
-        PixelFont.drawLeft(g2, status.toUpperCase(), statusBounds, 2, PixelArtApp.MUTED_TEXT);
+        PixelFont.drawLeft(g2, status.toUpperCase(), statusBounds, 2, PixelConstants.MUTED_TEXT);
 
         String prompt = "> " + currentInput + (caretVisible ? "_" : " ");
         Rectangle inputBounds = new Rectangle(padding, padding + 22, getWidth() - padding * 2, lineHeight + 10);
-        PixelFont.drawLeft(g2, prompt, inputBounds, 2, PixelArtApp.TEXT);
+        PixelFont.drawLeft(g2, prompt, inputBounds, 2, PixelConstants.TEXT);
 
         if (hasFocus) {
             g2.setColor(new Color(255, 170, 60));

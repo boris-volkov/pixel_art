@@ -9,6 +9,8 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 
+import PixelConstants;
+
 class AnimationPanel extends JComponent {
     interface Host {
         boolean isPlaying();
@@ -31,14 +33,10 @@ class AnimationPanel extends JComponent {
     private Rectangle dupBounds;
     private final List<Rectangle> frameRects = new ArrayList<>();
 
-    AnimationPanel(PixelArtApp app) {
-        this(new PixelArtAppHost(app));
-    }
-
     AnimationPanel(Host host) {
         this.host = host;
         setOpaque(true);
-        setBackground(PixelArtApp.BG);
+        setBackground(PixelConstants.BG);
         setPreferredSize(new java.awt.Dimension(0, 110));
         MouseAdapter mouse = new MouseAdapter() {
             @Override
@@ -90,7 +88,7 @@ class AnimationPanel extends JComponent {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setColor(PixelArtApp.BG);
+        g2.setColor(PixelConstants.BG);
         g2.fillRect(0, 0, getWidth(), getHeight());
         g2.setColor(new Color(90, 180, 90));
         g2.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
@@ -122,51 +120,23 @@ class AnimationPanel extends JComponent {
             Rectangle r = new Rectangle(x, y, frameSize, frameSize);
             frameRects.add(r);
             boolean active = (i == activeIdx);
-            g2.setColor(active ? PixelArtApp.ACCENT : PixelArtApp.BUTTON_BG);
+            g2.setColor(active ? PixelConstants.ACCENT : PixelConstants.BUTTON_BG);
             g2.fillRect(r.x, r.y, r.width, r.height);
-            g2.setColor(PixelArtApp.BUTTON_BORDER);
+            g2.setColor(PixelConstants.BUTTON_BORDER);
             g2.drawRect(r.x, r.y, r.width, r.height);
-            PixelFont.drawCentered(g2, String.valueOf(i + 1), r, 2, PixelArtApp.TEXT);
+            PixelFont.drawCentered(g2, String.valueOf(i + 1), r, 2, PixelConstants.TEXT);
         }
 
         g2.dispose();
     }
 
     private void drawButton(Graphics2D g2, Rectangle bounds, String label, boolean accent) {
-        g2.setColor(accent ? PixelArtApp.BUTTON_ACTIVE : PixelArtApp.BUTTON_BG);
+        g2.setColor(accent ? PixelConstants.BUTTON_ACTIVE : PixelConstants.BUTTON_BG);
         g2.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        g2.setColor(PixelArtApp.BUTTON_BORDER);
+        g2.setColor(PixelConstants.BUTTON_BORDER);
         g2.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        Color text = accent ? new Color(120, 220, 120) : PixelArtApp.TEXT;
+        Color text = accent ? new Color(120, 220, 120) : PixelConstants.TEXT;
         PixelFont.drawCentered(g2, label, bounds, 2, text);
     }
 
-    private static class PixelArtAppHost implements Host {
-        private final PixelArtApp app;
-
-        PixelArtAppHost(PixelArtApp app) {
-            this.app = app;
-        }
-
-        @Override
-        public boolean isPlaying() { return app.isPlaying(); }
-        @Override
-        public boolean isOnionEnabled() { return app.isOnionEnabled(); }
-        @Override
-        public int frameCount() { return app.getFramesForActiveLayer().size(); }
-        @Override
-        public int currentFrameIndex() { return app.getCurrentFrameIndexForActiveLayer(); }
-        @Override
-        public void togglePlayback() { app.togglePlayback(); }
-        @Override
-        public void toggleOnion() { app.toggleOnion(); }
-        @Override
-        public void addBlankFrame() { app.addBlankFrame(); }
-        @Override
-        public void deleteCurrentFrame() { app.deleteCurrentFrame(); }
-        @Override
-        public void duplicateCurrentFrame() { app.duplicateCurrentFrame(); }
-        @Override
-        public void selectFrame(int index) { app.selectFrame(index); }
-    }
 }

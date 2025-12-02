@@ -9,6 +9,8 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
+import PixelConstants;
+
 class StampPanel extends JPanel {
     interface Host {
         boolean isStampUsingOwnColors();
@@ -20,22 +22,18 @@ class StampPanel extends JPanel {
     private final ClearButton clearButton;
     private final ToggleButton modeButton;
 
-    StampPanel(PixelCanvas stampCanvas, PixelArtApp app) {
-        this(stampCanvas, new PixelArtAppHost(app));
-    }
-
     StampPanel(PixelCanvas stampCanvas, Host app) {
         this.stampCanvas = stampCanvas;
         this.app = app;
         setOpaque(false);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        stampCanvas.setBorder(javax.swing.BorderFactory.createLineBorder(PixelArtApp.BUTTON_BORDER));
+        stampCanvas.setBorder(javax.swing.BorderFactory.createLineBorder(PixelConstants.BUTTON_BORDER));
         stampCanvas.setAlignmentX(CENTER_ALIGNMENT);
         add(stampCanvas);
         add(javax.swing.Box.createRigidArea(new Dimension(1, 6)));
         clearButton = new ClearButton(() -> this.stampCanvas.clear());
         clearButton.setAlignmentX(CENTER_ALIGNMENT);
-        modeButton = new ToggleButton(app.isStampUsingOwnColors() ? "OWN" : "MAIN", () -> toggleMode());
+        modeButton = new ToggleButton(app.isStampUsingOwnColors() ? "OWN" : "MAIN", this::toggleMode);
         modeButton.setAlignmentX(CENTER_ALIGNMENT);
         JPanel buttons = new JPanel();
         buttons.setOpaque(false);
@@ -54,24 +52,6 @@ class StampPanel extends JPanel {
         modeButton.repaint();
     }
 
-    private static class PixelArtAppHost implements Host {
-        private final PixelArtApp app;
-
-        PixelArtAppHost(PixelArtApp app) {
-            this.app = app;
-        }
-
-        @Override
-        public boolean isStampUsingOwnColors() {
-            return app.isStampUsingOwnColors();
-        }
-
-        @Override
-        public void setStampUseOwnColors(boolean useOwn) {
-            app.setStampUseOwnColors(useOwn);
-        }
-    }
-
     private static class ClearButton extends JComponent {
         private final Runnable action;
         private boolean hover = false;
@@ -85,24 +65,11 @@ class StampPanel extends JPanel {
             setOpaque(false);
             MouseAdapter m = new MouseAdapter() {
                 @Override
-                public void mouseEntered(MouseEvent e) {
-                    hover = true;
-                    repaint();
-                }
-
+                public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
                 @Override
-                public void mouseExited(MouseEvent e) {
-                    hover = false;
-                    pressed = false;
-                    repaint();
-                }
-
+                public void mouseExited(MouseEvent e) { hover = false; pressed = false; repaint(); }
                 @Override
-                public void mousePressed(MouseEvent e) {
-                    pressed = true;
-                    repaint();
-                }
-
+                public void mousePressed(MouseEvent e) { pressed = true; repaint(); }
                 @Override
                 public void mouseReleased(MouseEvent e) {
                     if (pressed && contains(e.getPoint())) {
@@ -119,15 +86,13 @@ class StampPanel extends JPanel {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            Color fill = PixelArtApp.BUTTON_BG;
-            if (pressed)
-                fill = PixelArtApp.BUTTON_ACTIVE;
-            else if (hover)
-                fill = PixelArtApp.BUTTON_HOVER;
+            Color fill = PixelConstants.BUTTON_BG;
+            if (pressed) fill = PixelConstants.BUTTON_ACTIVE;
+            else if (hover) fill = PixelConstants.BUTTON_HOVER;
             g2.setColor(fill);
             g2.fillRect(0, 0, getWidth(), getHeight());
-            g2.setColor(PixelArtApp.TEXT);
-            PixelFont.draw(g2, "CLR", new java.awt.Rectangle(0, 0, getWidth(), getHeight()), 2, PixelArtApp.TEXT);
+            g2.setColor(PixelConstants.TEXT);
+            PixelFont.draw(g2, "CLR", new java.awt.Rectangle(0, 0, getWidth(), getHeight()), 2, PixelConstants.TEXT);
             g2.dispose();
         }
     }
@@ -147,24 +112,11 @@ class StampPanel extends JPanel {
             setOpaque(false);
             MouseAdapter m = new MouseAdapter() {
                 @Override
-                public void mouseEntered(MouseEvent e) {
-                    hover = true;
-                    repaint();
-                }
-
+                public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
                 @Override
-                public void mouseExited(MouseEvent e) {
-                    hover = false;
-                    pressed = false;
-                    repaint();
-                }
-
+                public void mouseExited(MouseEvent e) { hover = false; pressed = false; repaint(); }
                 @Override
-                public void mousePressed(MouseEvent e) {
-                    pressed = true;
-                    repaint();
-                }
-
+                public void mousePressed(MouseEvent e) { pressed = true; repaint(); }
                 @Override
                 public void mouseReleased(MouseEvent e) {
                     if (pressed && contains(e.getPoint())) {
@@ -185,15 +137,13 @@ class StampPanel extends JPanel {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            Color fill = PixelArtApp.BUTTON_BG;
-            if (pressed)
-                fill = PixelArtApp.BUTTON_ACTIVE;
-            else if (hover)
-                fill = PixelArtApp.BUTTON_HOVER;
+            Color fill = PixelConstants.BUTTON_BG;
+            if (pressed) fill = PixelConstants.BUTTON_ACTIVE;
+            else if (hover) fill = PixelConstants.BUTTON_HOVER;
             g2.setColor(fill);
             g2.fillRect(0, 0, getWidth(), getHeight());
-            g2.setColor(PixelArtApp.TEXT);
-            PixelFont.draw(g2, label.toUpperCase(), new java.awt.Rectangle(0, 0, getWidth(), getHeight()), 2, PixelArtApp.TEXT);
+            g2.setColor(PixelConstants.TEXT);
+            PixelFont.draw(g2, label.toUpperCase(), new java.awt.Rectangle(0, 0, getWidth(), getHeight()), 2, PixelConstants.TEXT);
             g2.dispose();
         }
     }

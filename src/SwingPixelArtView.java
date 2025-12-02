@@ -9,6 +9,9 @@ import java.util.function.IntPredicate;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
+import PixelConstants;
+import ToolMode;
+
 public class SwingPixelArtView implements PixelArtView {
     private JFrame frame;
     private CanvasViewport canvasHolder;
@@ -26,7 +29,7 @@ public class SwingPixelArtView implements PixelArtView {
     // Callbacks
     private Consumer<Color> canvasPickCallback;
     private IntConsumer brushSizeCallback;
-    private Supplier<PixelArtApp.ToolMode> toolModeCallback;
+    private Supplier<ToolMode> toolModeCallback;
     private Supplier<Color[][]> stampCallback;
     private Supplier<Color[][][]> onionCallback;
     private IntSupplier activeLayerCallback;
@@ -52,11 +55,11 @@ public class SwingPixelArtView implements PixelArtView {
     public void initialize() {
         frame = new JFrame("Pixel Art");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.getContentPane().setBackground(PixelArtApp.BG);
+        frame.getContentPane().setBackground(PixelConstants.BG);
 
         // Initialize components
         canvasHolder = new CanvasViewport(null); // Will be set later
-        canvasHolder.setBackground(PixelArtApp.BG);
+        canvasHolder.setBackground(PixelConstants.BG);
 
         controlBarSlot = new JPanel(new BorderLayout());
         controlBarSlot.setOpaque(false);
@@ -73,13 +76,13 @@ public class SwingPixelArtView implements PixelArtView {
         timeline = null; // Will be set later
 
         southWrap = new JPanel(new BorderLayout());
-        southWrap.setBackground(PixelArtApp.BG);
+        southWrap.setBackground(PixelConstants.BG);
         southWrap.add(animationSlot, BorderLayout.NORTH);
         southWrap.add(console, BorderLayout.SOUTH);
 
         // Layout setup
         JPanel east = new JPanel(new BorderLayout());
-        east.setBackground(PixelArtApp.BG);
+        east.setBackground(PixelConstants.BG);
 
         JPanel topRow = new JPanel();
         topRow.setOpaque(false);
@@ -275,7 +278,7 @@ public class SwingPixelArtView implements PixelArtView {
         g2.setColor(new Color(0, 0, 0, 0));
         g2.fillRect(0, 0, size, size);
         Rectangle bounds = new Rectangle(0, 0, size, size);
-        PixelFont.draw(g2, "+", bounds, 3, PixelArtApp.TEXT);
+        PixelFont.draw(g2, "+", bounds, 3, PixelConstants.TEXT);
         g2.dispose();
         Point hotspot = new Point(size / 2, size / 2);
         return Toolkit.getDefaultToolkit().createCustomCursor(img, hotspot, "pixel-plus");
@@ -382,7 +385,7 @@ public class SwingPixelArtView implements PixelArtView {
     }
 
     @Override
-    public void setToolModeCallback(Supplier<PixelArtApp.ToolMode> callback) {
+    public void setToolModeCallback(Supplier<ToolMode> callback) {
         this.toolModeCallback = callback;
     }
 

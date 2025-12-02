@@ -10,6 +10,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
 
+import PixelConstants;
+import ToolMode;
+
 class ControlBar extends JComponent {
     interface Host {
         int getRed();
@@ -30,8 +33,8 @@ class ControlBar extends JComponent {
         void setBrightnessPercent(int v);
         void setBrushSize(int v);
         void setCanvasCellSize(int v);
-        void setToolMode(PixelArtApp.ToolMode mode);
-        PixelArtApp.ToolMode getToolMode();
+        void setToolMode(ToolMode mode);
+        ToolMode getToolMode();
         void setActiveLayer(int idx);
         void toggleLayerVisibility(int idx);
         void swapLayerUp(int idx);
@@ -67,10 +70,6 @@ class ControlBar extends JComponent {
     private ActionButton activeButton;
     private final Timer repeatTimer;
 
-    ControlBar(PixelArtApp app) {
-        this(new PixelArtAppHost(app));
-    }
-
     ControlBar(Host app) {
         this.app = app;
         redSlider = new SliderControl("RED", 0, 255, app.getRed(), v -> {
@@ -101,37 +100,37 @@ class ControlBar extends JComponent {
             app.setBrushSize(v);
             repaint();
         });
-        int zoomCap = Math.max(2, Math.max(app.computeMaxCellSizeForScreen(), PixelArtApp.MAX_CELL_SIZE));
+        int zoomCap = Math.max(2, Math.max(app.computeMaxCellSizeForScreen(), PixelConstants.MAX_CELL_SIZE));
         zoomSlider = new SliderControl("ZOOM", 2, zoomCap, app.getCanvasCellSize(), v -> {
             app.setCanvasCellSize(v);
             repaint();
         });
         toolBrush = new ActionButton("BR", () -> {
-            app.setToolMode(PixelArtApp.ToolMode.BRUSH);
+            app.setToolMode(ToolMode.BRUSH);
             repaint();
         }, true);
         toolStamp = new ActionButton("ST", () -> {
-            app.setToolMode(PixelArtApp.ToolMode.STAMP);
+            app.setToolMode(ToolMode.STAMP);
             repaint();
         }, true);
         toolFill = new ActionButton("FI", () -> {
-            app.setToolMode(PixelArtApp.ToolMode.FILL);
+            app.setToolMode(ToolMode.FILL);
             repaint();
         }, true);
         toolBlur = new ActionButton("BL", () -> {
-            app.setToolMode(PixelArtApp.ToolMode.BLUR);
+            app.setToolMode(ToolMode.BLUR);
             repaint();
         }, true);
         toolMove = new ActionButton("MV", () -> {
-            app.setToolMode(PixelArtApp.ToolMode.MOVE);
+            app.setToolMode(ToolMode.MOVE);
             repaint();
         }, true);
         toolRotate = new ActionButton("RT", () -> {
-            app.setToolMode(PixelArtApp.ToolMode.ROTATE);
+            app.setToolMode(ToolMode.ROTATE);
             repaint();
         }, true);
         toolErase = new ActionButton("ER", () -> {
-            app.setToolMode(PixelArtApp.ToolMode.ERASER);
+            app.setToolMode(ToolMode.ERASER);
             repaint();
         }, true);
         layerButtons = new ActionButton[] {
@@ -163,40 +162,40 @@ class ControlBar extends JComponent {
                 new ActionButton("Clear", () -> app.getCanvas().clear(), true),
                 new ActionButton("C-",
                         () -> app.getCanvas()
-                                .adjustAll(color -> PixelArtApp.adjustChannel(color, PixelArtApp.COLOR_STEP, 0, 0)),
+                                .adjustAll(color -> PixelConstants.adjustChannel(color, PixelConstants.COLOR_STEP, 0, 0)),
                         false),
                 new ActionButton("C+",
                         () -> app.getCanvas()
-                                .adjustAll(color -> PixelArtApp.adjustChannel(color, -PixelArtApp.COLOR_STEP, 0, 0)),
+                                .adjustAll(color -> PixelConstants.adjustChannel(color, -PixelConstants.COLOR_STEP, 0, 0)),
                         false),
                 new ActionButton("M-",
                         () -> app.getCanvas()
-                                .adjustAll(color -> PixelArtApp.adjustChannel(color, 0, PixelArtApp.COLOR_STEP, 0)),
+                                .adjustAll(color -> PixelConstants.adjustChannel(color, 0, PixelConstants.COLOR_STEP, 0)),
                         false),
                 new ActionButton("M+",
                         () -> app.getCanvas()
-                                .adjustAll(color -> PixelArtApp.adjustChannel(color, 0, -PixelArtApp.COLOR_STEP, 0)),
+                                .adjustAll(color -> PixelConstants.adjustChannel(color, 0, -PixelConstants.COLOR_STEP, 0)),
                         false),
                 new ActionButton("Y-",
                         () -> app.getCanvas()
-                                .adjustAll(color -> PixelArtApp.adjustChannel(color, 0, 0, PixelArtApp.COLOR_STEP)),
+                                .adjustAll(color -> PixelConstants.adjustChannel(color, 0, 0, PixelConstants.COLOR_STEP)),
                         false),
                 new ActionButton("Y+",
                         () -> app.getCanvas()
-                                .adjustAll(color -> PixelArtApp.adjustChannel(color, 0, 0, -PixelArtApp.COLOR_STEP)),
+                                .adjustAll(color -> PixelConstants.adjustChannel(color, 0, 0, -PixelConstants.COLOR_STEP)),
                         false),
                 new ActionButton("B-",
                         () -> app.getCanvas()
-                                .adjustAll(color -> PixelArtApp.adjustBrightness(color, -PixelArtApp.BRIGHT_STEP)),
+                                .adjustAll(color -> PixelConstants.adjustBrightness(color, -PixelConstants.BRIGHT_STEP)),
                         false),
                 new ActionButton("B+",
                         () -> app.getCanvas()
-                                .adjustAll(color -> PixelArtApp.adjustBrightness(color, PixelArtApp.BRIGHT_STEP)),
+                                .adjustAll(color -> PixelConstants.adjustBrightness(color, PixelConstants.BRIGHT_STEP)),
                         false));
 
         setOpaque(true);
-        setBackground(PixelArtApp.BG);
-        setPreferredSize(new Dimension(PixelArtApp.CONTROL_BAR_WIDTH, 0));
+        setBackground(PixelConstants.BG);
+        setPreferredSize(new Dimension(PixelConstants.CONTROL_BAR_WIDTH, 0));
         repeatTimer = new Timer(70, e -> {
             if (activeButton != null) {
                 activeButton.action.run();
@@ -241,7 +240,7 @@ class ControlBar extends JComponent {
         valSlider.setValueSilently(app.getBrightnessPercent());
         brushSlider.setValueSilently(app.getBrushSize());
         int newZoomMax = Math.max(2, app.computeMaxCellSizeForScreen());
-        int maxZoom = Math.max(newZoomMax, PixelArtApp.MAX_CELL_SIZE);
+        int maxZoom = Math.max(newZoomMax, PixelConstants.MAX_CELL_SIZE);
         zoomSlider.setMax(maxZoom);
         zoomSlider.setValueSilently(Math.min(maxZoom, app.getCanvasCellSize()));
         repaint();
@@ -252,7 +251,7 @@ class ControlBar extends JComponent {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setColor(PixelArtApp.BG);
+        g2.setColor(PixelConstants.BG);
         g2.fillRect(0, 0, getWidth(), getHeight());
 
         int padding = 16;
@@ -325,28 +324,28 @@ class ControlBar extends JComponent {
         int thumbY = trackY + (trackHeight / 2) - (thumbHeight / 2);
         slider.thumb = new Rectangle(valueX - thumbWidth / 2, thumbY, thumbWidth, thumbHeight);
 
-        g2.setColor(PixelArtApp.TEXT);
+        g2.setColor(PixelConstants.TEXT);
         String valueText = slider.label + " : " + slider.value;
         Rectangle labelRect = new Rectangle(padding, y + SLIDER_LABEL_OFFSET, labelWidth, 18);
-        PixelFont.drawLeft(g2, valueText.toUpperCase(), labelRect, 2, PixelArtApp.TEXT);
+        PixelFont.drawLeft(g2, valueText.toUpperCase(), labelRect, 2, PixelConstants.TEXT);
 
-        g2.setColor(PixelArtApp.BUTTON_BG);
+        g2.setColor(PixelConstants.BUTTON_BG);
         g2.fillRect(trackX, trackY, trackWidth, trackHeight);
-        g2.setColor(PixelArtApp.BUTTON_BORDER);
+        g2.setColor(PixelConstants.BUTTON_BORDER);
         g2.drawRect(trackX, trackY, trackWidth, trackHeight);
 
         double fillRatio = slider.ratio();
         int fillWidth = (int) (trackWidth * fillRatio);
-        g2.setColor(PixelArtApp.ACCENT);
+        g2.setColor(PixelConstants.ACCENT);
         g2.fillRect(trackX, trackY, fillWidth, trackHeight);
 
         Color thumbColor = new Color(
-                Math.min(255, PixelArtApp.ACCENT.getRed() + 40),
-                Math.min(255, PixelArtApp.ACCENT.getGreen() + 40),
-                Math.min(255, PixelArtApp.ACCENT.getBlue() + 40));
+                Math.min(255, PixelConstants.ACCENT.getRed() + 40),
+                Math.min(255, PixelConstants.ACCENT.getGreen() + 40),
+                Math.min(255, PixelConstants.ACCENT.getBlue() + 40));
         g2.setColor(thumbColor);
         g2.fillRect(slider.thumb.x, slider.thumb.y, slider.thumb.width, slider.thumb.height);
-        g2.setColor(PixelArtApp.ACCENT);
+        g2.setColor(PixelConstants.ACCENT);
         g2.drawRect(slider.thumb.x, slider.thumb.y, slider.thumb.width, slider.thumb.height);
 
         slider.minus.bounds = new Rectangle(trackX - btnWidth - gap, trackY - 6, btnWidth, 22);
@@ -409,13 +408,13 @@ class ControlBar extends JComponent {
         Color themed = themedButtonColor(button, button.label, button.accent);
         Color fill = themed;
         if (button.pressed) {
-            fill = PixelArtApp.BUTTON_ACTIVE;
+            fill = PixelConstants.BUTTON_ACTIVE;
         } else if (button.hover) {
-            fill = PixelArtApp.BUTTON_HOVER;
+            fill = PixelConstants.BUTTON_HOVER;
         }
         g2.setColor(fill);
         g2.fillRect(button.bounds.x, button.bounds.y, button.bounds.width, button.bounds.height);
-        PixelFont.draw(g2, button.label.toUpperCase(), button.bounds, 2, PixelArtApp.TEXT);
+        PixelFont.draw(g2, button.label.toUpperCase(), button.bounds, 2, PixelConstants.TEXT);
     }
 
     private boolean tryPressButton(MouseEvent e) {
@@ -452,7 +451,7 @@ class ControlBar extends JComponent {
 
     @Override
     public Dimension getPreferredSize() {
-        return new Dimension(PixelArtApp.CONTROL_BAR_WIDTH, 0);
+        return new Dimension(PixelConstants.CONTROL_BAR_WIDTH, 0);
     }
 
     private ActionButton findButtonAt(int x, int y) {
@@ -512,9 +511,9 @@ class ControlBar extends JComponent {
     private Color themedButtonColor(ActionButton button, String label, boolean accent) {
         if (isActiveTool(button) || isActiveLayer(button)) {
             if (isActiveTool(button)) {
-                return PixelArtApp.MAGENTA_BTN; // highlight active tool
+            return PixelConstants.MAGENTA_BTN; // highlight active tool
             }
-            return PixelArtApp.ACCENT;
+            return PixelConstants.ACCENT;
         }
         if (button == toolMove || button == toolRotate) {
             return new Color(90, 180, 90); // gentler green for transforms
@@ -522,45 +521,45 @@ class ControlBar extends JComponent {
         if (isVisButton(button)) {
             int idx = visIndex(button);
             boolean visible = idx >= 0 && app.isLayerVisible(idx);
-            return visible ? PixelArtApp.BUTTON_BG : new Color(180, 60, 60);
+            return visible ? PixelConstants.BUTTON_BG : new Color(180, 60, 60);
         }
         if (label.startsWith("C")) {
             if (label.contains("-"))
                 return new Color(220, 90, 80);
-            return PixelArtApp.CYAN_BTN;
+            return PixelConstants.CYAN_BTN;
         }
         if ("Fill".equalsIgnoreCase(label) || "Clear".equalsIgnoreCase(label)) {
-            return PixelArtApp.CYAN_BTN;
+            return PixelConstants.CYAN_BTN;
         }
         if (label.startsWith("M")) {
             if (label.contains("-"))
                 return new Color(90, 180, 90);
-            return PixelArtApp.MAGENTA_BTN;
+            return PixelConstants.MAGENTA_BTN;
         }
         if (label.startsWith("Y")) {
             if (label.contains("-"))
                 return new Color(80, 120, 200);
-            return PixelArtApp.YELLOW_BTN;
+            return PixelConstants.YELLOW_BTN;
         }
-        return accent ? PixelArtApp.ACCENT.darker() : PixelArtApp.BUTTON_BG;
+        return accent ? PixelConstants.ACCENT.darker() : PixelConstants.BUTTON_BG;
     }
 
     private boolean isActiveTool(ActionButton button) {
-        PixelArtApp.ToolMode mode = app.getToolMode();
+        ToolMode mode = app.getToolMode();
         if (button == toolBrush)
-            return mode == PixelArtApp.ToolMode.BRUSH;
+            return mode == ToolMode.BRUSH;
         if (button == toolStamp)
-            return mode == PixelArtApp.ToolMode.STAMP;
+            return mode == ToolMode.STAMP;
         if (button == toolFill)
-            return mode == PixelArtApp.ToolMode.FILL;
+            return mode == ToolMode.FILL;
         if (button == toolBlur)
-            return mode == PixelArtApp.ToolMode.BLUR;
+            return mode == ToolMode.BLUR;
         if (button == toolMove)
-            return mode == PixelArtApp.ToolMode.MOVE;
+            return mode == ToolMode.MOVE;
         if (button == toolRotate)
-            return mode == PixelArtApp.ToolMode.ROTATE;
+            return mode == ToolMode.ROTATE;
         if (button == toolErase)
-            return mode == PixelArtApp.ToolMode.ERASER;
+            return mode == ToolMode.ERASER;
         return false;
     }
 
@@ -593,66 +592,4 @@ class ControlBar extends JComponent {
         return button == layerButtons[0] || button == layerButtons[1] || button == layerButtons[2];
     }
 
-    private static class PixelArtAppHost implements Host {
-        private final PixelArtApp app;
-
-        PixelArtAppHost(PixelArtApp app) {
-            this.app = app;
-        }
-
-        @Override
-        public int getRed() { return app.getRed(); }
-        @Override
-        public int getGreen() { return app.getGreen(); }
-        @Override
-        public int getBlue() { return app.getBlue(); }
-        @Override
-        public int getHueDegrees() { return app.getHueDegrees(); }
-        @Override
-        public int getSaturationPercent() { return app.getSaturationPercent(); }
-        @Override
-        public int getBrightnessPercent() { return app.getBrightnessPercent(); }
-        @Override
-        public int getBrushSize() { return app.getBrushSize(); }
-        @Override
-        public int getActiveLayer() { return app.getActiveLayer(); }
-        @Override
-        public int computeMaxCellSizeForScreen() { return app.computeMaxCellSizeForScreen(); }
-        @Override
-        public int getCanvasCellSize() { return app.getCanvasCellSize(); }
-        @Override
-        public void setRed(int v) { app.setRed(v); }
-        @Override
-        public void setGreen(int v) { app.setGreen(v); }
-        @Override
-        public void setBlue(int v) { app.setBlue(v); }
-        @Override
-        public void setHueDegrees(int v) { app.setHueDegrees(v); }
-        @Override
-        public void setSaturationPercent(int v) { app.setSaturationPercent(v); }
-        @Override
-        public void setBrightnessPercent(int v) { app.setBrightnessPercent(v); }
-        @Override
-        public void setBrushSize(int v) { app.setBrushSize(v); }
-        @Override
-        public void setCanvasCellSize(int v) { app.setCanvasCellSize(v); }
-        @Override
-        public void setToolMode(PixelArtApp.ToolMode mode) { app.setToolMode(mode); }
-        @Override
-        public PixelArtApp.ToolMode getToolMode() { return app.getToolMode(); }
-        @Override
-        public void setActiveLayer(int idx) { app.setActiveLayer(idx); }
-        @Override
-        public void toggleLayerVisibility(int idx) { app.toggleLayerVisibility(idx); }
-        @Override
-        public void swapLayerUp(int idx) { app.swapLayerUp(idx); }
-        @Override
-        public PixelCanvas getCanvas() { return app.getCanvas(); }
-        @Override
-        public Color currentBrushColor() { return app.currentBrushColor(); }
-        @Override
-        public String getLayerName(int idx) { return app.getLayerName(idx); }
-        @Override
-        public boolean isLayerVisible(int idx) { return app.isLayerVisible(idx); }
-    }
 }
