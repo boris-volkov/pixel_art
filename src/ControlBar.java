@@ -11,9 +11,39 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 
 class ControlBar extends JComponent {
+    interface Host {
+        int getRed();
+        int getGreen();
+        int getBlue();
+        int getHueDegrees();
+        int getSaturationPercent();
+        int getBrightnessPercent();
+        int getBrushSize();
+        int getActiveLayer();
+        int computeMaxCellSizeForScreen();
+        int getCanvasCellSize();
+        void setRed(int v);
+        void setGreen(int v);
+        void setBlue(int v);
+        void setHueDegrees(int v);
+        void setSaturationPercent(int v);
+        void setBrightnessPercent(int v);
+        void setBrushSize(int v);
+        void setCanvasCellSize(int v);
+        void setToolMode(PixelArtApp.ToolMode mode);
+        PixelArtApp.ToolMode getToolMode();
+        void setActiveLayer(int idx);
+        void toggleLayerVisibility(int idx);
+        void swapLayerUp(int idx);
+        PixelCanvas getCanvas();
+        Color currentBrushColor();
+        String getLayerName(int idx);
+        boolean isLayerVisible(int idx);
+    }
+
     private static final int SLIDER_LABEL_OFFSET = 4; // adjust label Y relative to slider row
     private static final int SLIDER_TRACK_OFFSET = 8; // adjust track Y relative to slider row
-    private final PixelArtApp app;
+    private final Host app;
     private final SliderControl redSlider;
     private final SliderControl greenSlider;
     private final SliderControl blueSlider;
@@ -38,6 +68,10 @@ class ControlBar extends JComponent {
     private final Timer repeatTimer;
 
     ControlBar(PixelArtApp app) {
+        this(new PixelArtAppHost(app));
+    }
+
+    ControlBar(Host app) {
         this.app = app;
         redSlider = new SliderControl("RED", 0, 255, app.getRed(), v -> {
             app.setRed(v);
@@ -557,5 +591,68 @@ class ControlBar extends JComponent {
 
     private boolean isLayerButton(ActionButton button) {
         return button == layerButtons[0] || button == layerButtons[1] || button == layerButtons[2];
+    }
+
+    private static class PixelArtAppHost implements Host {
+        private final PixelArtApp app;
+
+        PixelArtAppHost(PixelArtApp app) {
+            this.app = app;
+        }
+
+        @Override
+        public int getRed() { return app.getRed(); }
+        @Override
+        public int getGreen() { return app.getGreen(); }
+        @Override
+        public int getBlue() { return app.getBlue(); }
+        @Override
+        public int getHueDegrees() { return app.getHueDegrees(); }
+        @Override
+        public int getSaturationPercent() { return app.getSaturationPercent(); }
+        @Override
+        public int getBrightnessPercent() { return app.getBrightnessPercent(); }
+        @Override
+        public int getBrushSize() { return app.getBrushSize(); }
+        @Override
+        public int getActiveLayer() { return app.getActiveLayer(); }
+        @Override
+        public int computeMaxCellSizeForScreen() { return app.computeMaxCellSizeForScreen(); }
+        @Override
+        public int getCanvasCellSize() { return app.getCanvasCellSize(); }
+        @Override
+        public void setRed(int v) { app.setRed(v); }
+        @Override
+        public void setGreen(int v) { app.setGreen(v); }
+        @Override
+        public void setBlue(int v) { app.setBlue(v); }
+        @Override
+        public void setHueDegrees(int v) { app.setHueDegrees(v); }
+        @Override
+        public void setSaturationPercent(int v) { app.setSaturationPercent(v); }
+        @Override
+        public void setBrightnessPercent(int v) { app.setBrightnessPercent(v); }
+        @Override
+        public void setBrushSize(int v) { app.setBrushSize(v); }
+        @Override
+        public void setCanvasCellSize(int v) { app.setCanvasCellSize(v); }
+        @Override
+        public void setToolMode(PixelArtApp.ToolMode mode) { app.setToolMode(mode); }
+        @Override
+        public PixelArtApp.ToolMode getToolMode() { return app.getToolMode(); }
+        @Override
+        public void setActiveLayer(int idx) { app.setActiveLayer(idx); }
+        @Override
+        public void toggleLayerVisibility(int idx) { app.toggleLayerVisibility(idx); }
+        @Override
+        public void swapLayerUp(int idx) { app.swapLayerUp(idx); }
+        @Override
+        public PixelCanvas getCanvas() { return app.getCanvas(); }
+        @Override
+        public Color currentBrushColor() { return app.currentBrushColor(); }
+        @Override
+        public String getLayerName(int idx) { return app.getLayerName(idx); }
+        @Override
+        public boolean isLayerVisible(int idx) { return app.isLayerVisible(idx); }
     }
 }

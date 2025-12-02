@@ -10,7 +10,9 @@ class CanvasViewport extends JPanel {
     CanvasViewport(PixelCanvas canvas) {
         this.canvas = canvas;
         setLayout(null);
-        add(canvas);
+        if (canvas != null) {
+            add(canvas);
+        }
         setFocusable(true);
         addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
@@ -21,15 +23,22 @@ class CanvasViewport extends JPanel {
     }
 
     void setCanvas(PixelCanvas newCanvas) {
-        remove(canvas);
+        if (canvas != null) {
+            remove(canvas);
+        }
         canvas = newCanvas;
-        add(canvas);
+        if (canvas != null) {
+            add(canvas);
+        }
         offsetX = 0;
         offsetY = 0;
         refreshLayout();
     }
 
     void refreshLayout() {
+        if (canvas == null) {
+            return;
+        }
         Dimension size = getSize();
         Dimension pref = canvas.getPreferredSize();
         int cw = pref.width;

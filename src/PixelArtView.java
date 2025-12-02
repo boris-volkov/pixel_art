@@ -54,6 +54,7 @@ public interface PixelArtView {
     void setPanBlockCallback(Supplier<Boolean> callback);
 
     void setUndoCallback(Runnable callback);
+    void setRedoCallback(Runnable callback);
 
     // Controllers
     void setCanvasController(Object canvasController); // PixelCanvas
@@ -61,6 +62,8 @@ public interface PixelArtView {
     void setControlBarController(Object controlBarController); // ControlBar
 
     void setTopBarController(Object topBarController); // TopBar
+
+    void setStampController(Object stampController); // StampPanel
 
     void setConsoleController(Object consoleController); // ConsolePanel
 

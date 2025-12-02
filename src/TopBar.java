@@ -8,10 +8,19 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 class TopBar extends JComponent {
-    private final PixelArtApp app;
+    interface Host {
+        Color currentBrushColor();
+        void pickBrushColor(Color color);
+    }
+
+    private final Host app;
     private final Rectangle[] swatchRects = new Rectangle[9];
 
     TopBar(PixelArtApp app) {
+        this(new PixelArtAppHost(app));
+    }
+
+    TopBar(Host app) {
         this.app = app;
         setOpaque(false);
         setPreferredSize(new java.awt.Dimension(140, 140));
@@ -30,6 +39,24 @@ class TopBar extends JComponent {
                 }
             }
         });
+    }
+
+    private static class PixelArtAppHost implements Host {
+        private final PixelArtApp app;
+
+        PixelArtAppHost(PixelArtApp app) {
+            this.app = app;
+        }
+
+        @Override
+        public Color currentBrushColor() {
+            return app.currentBrushColor();
+        }
+
+        @Override
+        public void pickBrushColor(Color color) {
+            app.pickBrushColor(color);
+        }
     }
 
     @Override

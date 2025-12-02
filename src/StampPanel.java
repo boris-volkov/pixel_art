@@ -10,12 +10,21 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 class StampPanel extends JPanel {
+    interface Host {
+        boolean isStampUsingOwnColors();
+        void setStampUseOwnColors(boolean useOwn);
+    }
+
     private final PixelCanvas stampCanvas;
-    private final PixelArtApp app;
+    private final Host app;
     private final ClearButton clearButton;
     private final ToggleButton modeButton;
 
     StampPanel(PixelCanvas stampCanvas, PixelArtApp app) {
+        this(stampCanvas, new PixelArtAppHost(app));
+    }
+
+    StampPanel(PixelCanvas stampCanvas, Host app) {
         this.stampCanvas = stampCanvas;
         this.app = app;
         setOpaque(false);
@@ -43,6 +52,24 @@ class StampPanel extends JPanel {
         app.setStampUseOwnColors(useOwn);
         modeButton.setLabel(useOwn ? "OWN" : "MAIN");
         modeButton.repaint();
+    }
+
+    private static class PixelArtAppHost implements Host {
+        private final PixelArtApp app;
+
+        PixelArtAppHost(PixelArtApp app) {
+            this.app = app;
+        }
+
+        @Override
+        public boolean isStampUsingOwnColors() {
+            return app.isStampUsingOwnColors();
+        }
+
+        @Override
+        public void setStampUseOwnColors(boolean useOwn) {
+            app.setStampUseOwnColors(useOwn);
+        }
     }
 
     private static class ClearButton extends JComponent {

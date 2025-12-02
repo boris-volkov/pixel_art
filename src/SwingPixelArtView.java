@@ -13,10 +13,15 @@ public class SwingPixelArtView implements PixelArtView {
     private JFrame frame;
     private CanvasViewport canvasHolder;
     private ControlBar controlBar;
+    private JPanel controlBarSlot;
+    private JPanel topBarSlot;
+    private JPanel stampSlot;
     private TopBar topBar;
+    private StampPanel stampPanel;
     private ConsolePanel console;
     private AnimationPanel timeline;
     private JPanel southWrap;
+    private JPanel animationSlot;
 
     // Callbacks
     private Consumer<Color> canvasPickCallback;
@@ -28,6 +33,7 @@ public class SwingPixelArtView implements PixelArtView {
     private IntPredicate layerVisibleCallback;
     private Supplier<Boolean> panBlockCallback;
     private Runnable undoCallback;
+    private Runnable redoCallback;
 
     // Controllers
     private PixelCanvas canvasController;
@@ -50,15 +56,23 @@ public class SwingPixelArtView implements PixelArtView {
         canvasHolder = new CanvasViewport(null); // Will be set later
         canvasHolder.setBackground(PixelArtApp.BG);
 
-        controlBar = new ControlBar(null); // Will be set later
-        console = new ConsolePanel(null); // Will be set later
-        topBar = new TopBar(null); // Will be set later
-        timeline = new AnimationPanel(null); // Will be set later
-        timeline.setVisible(false);
+        controlBarSlot = new JPanel(new BorderLayout());
+        controlBarSlot.setOpaque(false);
+        controlBar = null; // Will be set later
+        topBarSlot = new JPanel(new BorderLayout());
+        topBarSlot.setOpaque(false);
+        stampSlot = new JPanel(new BorderLayout());
+        stampSlot.setOpaque(false);
+        animationSlot = new JPanel(new BorderLayout());
+        animationSlot.setOpaque(false);
+        console = new ConsolePanel(cmd -> {
+        }); // placeholder; will be replaced
+        topBar = null; // Will be set later
+        timeline = null; // Will be set later
 
         southWrap = new JPanel(new BorderLayout());
         southWrap.setBackground(PixelArtApp.BG);
-        southWrap.add(timeline, BorderLayout.NORTH);
+        southWrap.add(animationSlot, BorderLayout.NORTH);
         southWrap.add(console, BorderLayout.SOUTH);
 
         // Layout setup
@@ -69,9 +83,8 @@ public class SwingPixelArtView implements PixelArtView {
         topRow.setOpaque(false);
         topRow.setLayout(new BoxLayout(topRow, BoxLayout.X_AXIS));
         topRow.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        StampPanel stampHolder = new StampPanel(null, null); // Will be set later
-        FocusWrap topWrapLeft = new FocusWrap(topBar);
-        FocusWrap topWrapRight = new FocusWrap(stampHolder);
+        FocusWrap topWrapLeft = new FocusWrap(topBarSlot);
+        FocusWrap topWrapRight = new FocusWrap(stampSlot);
         topRow.add(topWrapLeft);
         topRow.add(Box.createRigidArea(new Dimension(6, 1)));
         topRow.add(topWrapRight);
@@ -81,7 +94,7 @@ public class SwingPixelArtView implements PixelArtView {
         topWrap.add(topRow);
         topWrap.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         east.add(topWrap, BorderLayout.NORTH);
-        FocusWrap controlWrap = new FocusWrap(controlBar);
+        FocusWrap controlWrap = new FocusWrap(controlBarSlot);
         east.add(controlWrap, BorderLayout.CENTER);
 
         frame.add(canvasHolder, BorderLayout.CENTER);
@@ -105,7 +118,8 @@ public class SwingPixelArtView implements PixelArtView {
         root.getActionMap().put("redo", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                // Implement redo if needed
+                if (redoCallback != null)
+                    redoCallback.run();
             }
         });
         installConsoleToggle(root);
@@ -345,9 +359,12 @@ public class SwingPixelArtView implements PixelArtView {
 
     @Override
     public void showAnimationPanel(boolean visible) {
+        if (animationSlot != null) {
+            animationSlot.setVisible(visible);
+            animationSlot.revalidate();
+        }
         if (timeline != null) {
             timeline.setVisible(visible);
-            southWrap.revalidate();
         }
     }
 
@@ -397,6 +414,11 @@ public class SwingPixelArtView implements PixelArtView {
     }
 
     @Override
+    public void setRedoCallback(Runnable callback) {
+        this.redoCallback = callback;
+    }
+
+    @Override
     public void setCanvasController(Object canvasController) {
         this.canvasController = (PixelCanvas) canvasController;
         if (canvasHolder != null) {
@@ -407,25 +429,64 @@ public class SwingPixelArtView implements PixelArtView {
     @Override
     public void setControlBarController(Object controlBarController) {
         this.controlBarController = (ControlBar) controlBarController;
-        // Link control bar to view if needed
+        this.controlBar = this.controlBarController;
+        if (controlBarSlot != null) {
+            controlBarSlot.removeAll();
+            controlBarSlot.add(controlBar, BorderLayout.CENTER);
+            controlBarSlot.revalidate();
+            controlBarSlot.repaint();
+        }
     }
 
     @Override
     public void setTopBarController(Object topBarController) {
         this.topBarController = (TopBar) topBarController;
-        // Link top bar to view if needed
+        this.topBar = this.topBarController;
+        if (topBarSlot != null) {
+            topBarSlot.removeAll();
+            topBarSlot.add(topBar, BorderLayout.CENTER);
+            topBarSlot.revalidate();
+            topBarSlot.repaint();
+        }
+    }
+
+    @Override
+    public void setStampController(Object stampController) {
+        this.stampPanel = (StampPanel) stampController;
+        if (stampSlot != null) {
+            stampSlot.removeAll();
+            stampSlot.add(stampPanel, BorderLayout.CENTER);
+            stampSlot.revalidate();
+            stampSlot.repaint();
+        }
     }
 
     @Override
     public void setConsoleController(Object consoleController) {
         this.consoleController = (ConsolePanel) consoleController;
-        // Link console to view if needed
+        this.console = this.consoleController;
+        if (southWrap != null) {
+            java.awt.Component existing = ((BorderLayout) southWrap.getLayout())
+                    .getLayoutComponent(BorderLayout.SOUTH);
+            if (existing != null) {
+                southWrap.remove(existing);
+            }
+            southWrap.add(console, BorderLayout.SOUTH);
+            southWrap.revalidate();
+            southWrap.repaint();
+        }
     }
 
     @Override
     public void setAnimationController(Object animationController) {
         this.animationController = (AnimationPanel) animationController;
-        // Link animation panel to view if needed
+        this.timeline = this.animationController;
+        if (animationSlot != null) {
+            animationSlot.removeAll();
+            animationSlot.add(timeline, BorderLayout.CENTER);
+            animationSlot.revalidate();
+            animationSlot.repaint();
+        }
     }
 
     @Override
