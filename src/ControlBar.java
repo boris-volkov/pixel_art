@@ -10,8 +10,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
 
-import PixelConstants;
-import ToolMode;
 
 class ControlBar extends JComponent {
     interface Host {

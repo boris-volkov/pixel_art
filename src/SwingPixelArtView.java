@@ -9,8 +9,6 @@ import java.util.function.IntPredicate;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import PixelConstants;
-import ToolMode;
 
 public class SwingPixelArtView implements PixelArtView {
     private JFrame frame;

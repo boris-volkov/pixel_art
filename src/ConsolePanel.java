@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
-import PixelConstants;
 
 class ConsolePanel extends JComponent {
     private final Consumer<String> commandHandler;

@@ -17,8 +17,6 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
-import PixelConstants;
-import ToolMode;
 
 class PixelCanvas extends javax.swing.JPanel {
     private final int columns;

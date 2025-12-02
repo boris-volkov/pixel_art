@@ -6,7 +6,6 @@ import java.util.function.IntPredicate;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import ToolMode;
 
 public interface PixelArtView {
     // Lifecycle

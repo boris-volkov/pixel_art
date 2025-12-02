@@ -9,7 +9,6 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-import PixelConstants;
 
 class AnimationPanel extends JComponent {
     interface Host {

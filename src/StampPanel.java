@@ -9,7 +9,6 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
-import PixelConstants;
 
 class StampPanel extends JPanel {
     interface Host {

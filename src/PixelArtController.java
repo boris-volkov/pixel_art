@@ -4,8 +4,6 @@ import java.awt.Toolkit;
 import java.io.IOException;
 import javax.swing.Timer;
 
-import PixelConstants;
-import ToolMode;
 
 public class PixelArtController {
     private final PixelArtModel model;

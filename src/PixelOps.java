@@ -1,9 +1,6 @@
 import java.awt.Color;
 import java.util.ArrayDeque;
 
-// Uses PixelConstants for shared colors/clamp.
-import PixelConstants;
-
 /**
  * Pixel-level operations that mutate a single layer in-place.
  * These are UI-agnostic helpers shared by canvas/controller.
