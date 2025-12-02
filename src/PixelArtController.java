@@ -688,8 +688,15 @@ public class PixelArtController {
     public Color[][][] getOnionComposite() {
         if (!model.isOnionEnabled())
             return null;
-        // Implement onion composite logic
-        return null;
+        int active = model.getActiveLayer();
+        var frames = model.getLayerFrames()[active];
+        if (frames == null || frames.size() < 2) return null;
+        int idx = Math.max(0, Math.min(model.getCurrentFrameIndex()[active], frames.size() - 1));
+        int prevIdx = (idx - 1 + frames.size()) % frames.size();
+        int nextIdx = (idx + 1) % frames.size();
+        Color[][] prev = frames.get(prevIdx).layer;
+        Color[][] next = frames.get(nextIdx).layer;
+        return new Color[][][] { prev, next };
     }
 
     public void performUndo() {
