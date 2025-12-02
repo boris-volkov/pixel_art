@@ -53,6 +53,7 @@ public class PixelArtController {
         view.setPanBlockCallback(() -> false); // Implement if needed
         view.setUndoCallback(this::performUndo);
         view.setRedoCallback(this::performRedo);
+        view.setToolSelectCallback(this::selectTool);
         view.setFrameStepCallback(this::stepFrame);
         view.setToggleOnionCallback(this::toggleOnion);
     }
@@ -578,6 +579,11 @@ public class PixelArtController {
         model.getColorState().setFromColor(color);
         view.updateBrushTargets(color);
         syncColorControls();
+    }
+
+    private void selectTool(ToolMode mode) {
+        model.setToolMode(mode);
+        view.repaintControls();
     }
 
     private void normalizeColorState() {

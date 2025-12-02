@@ -28,6 +28,7 @@ public class SwingPixelArtView implements PixelArtView {
     private Consumer<Color> canvasPickCallback;
     private IntConsumer brushSizeCallback;
     private Supplier<ToolMode> toolModeCallback;
+    private Consumer<ToolMode> toolSelectCallback;
     private Supplier<Color[][]> stampCallback;
     private Supplier<Color[][][]> onionCallback;
     private IntSupplier activeLayerCallback;
@@ -129,6 +130,7 @@ public class SwingPixelArtView implements PixelArtView {
         installConsoleToggle(root);
         installPanKeys(root);
         installFrameStepper(root);
+        installToolKeys(root);
     }
 
     private void installConsoleToggle(JComponent root) {
@@ -242,6 +244,31 @@ public class SwingPixelArtView implements PixelArtView {
                     return;
                 if (toggleOnionCallback != null)
                     toggleOnionCallback.run();
+            }
+        });
+    }
+
+    private void installToolKeys(JComponent root) {
+        bindToolKey(root, KeyEvent.VK_B, ToolMode.BRUSH);
+        bindToolKey(root, KeyEvent.VK_E, ToolMode.ERASER);
+        bindToolKey(root, KeyEvent.VK_S, ToolMode.STAMP);
+        bindToolKey(root, KeyEvent.VK_F, ToolMode.FILL);
+        bindToolKey(root, KeyEvent.VK_L, ToolMode.BLUR);
+        bindToolKey(root, KeyEvent.VK_M, ToolMode.MOVE);
+        bindToolKey(root, KeyEvent.VK_R, ToolMode.ROTATE);
+    }
+
+    private void bindToolKey(JComponent root, int keyCode, ToolMode mode) {
+        String actionKey = "tool_" + mode.name();
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(keyCode, 0), actionKey);
+        root.getActionMap().put(actionKey, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (console != null && console.isFocusOwner())
+                    return;
+                if (toolSelectCallback != null) {
+                    toolSelectCallback.accept(mode);
+                }
             }
         });
     }
@@ -386,6 +413,11 @@ public class SwingPixelArtView implements PixelArtView {
     @Override
     public void setToolModeCallback(Supplier<ToolMode> callback) {
         this.toolModeCallback = callback;
+    }
+
+    @Override
+    public void setToolSelectCallback(Consumer<ToolMode> callback) {
+        this.toolSelectCallback = callback;
     }
 
     @Override

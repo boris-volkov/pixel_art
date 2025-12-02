@@ -43,6 +43,7 @@ public interface PixelArtView {
     void setBrushSizeCallback(IntConsumer callback);
 
     void setToolModeCallback(Supplier<ToolMode> callback);
+    void setToolSelectCallback(Consumer<ToolMode> callback);
 
     void setStampCallback(Supplier<Color[][]> callback);
 
