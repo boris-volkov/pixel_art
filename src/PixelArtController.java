@@ -126,7 +126,7 @@ public class PixelArtController {
             @Override
             public void setCanvasCellSize(int v) { setCanvasCellSizeValue(v); }
             @Override
-            public void setToolMode(ToolMode mode) { model.setToolMode(mode); }
+            public void setToolMode(ToolMode mode) { PixelArtController.this.selectTool(mode); }
             @Override
             public ToolMode getToolMode() { return model.getToolMode(); }
             @Override
@@ -391,6 +391,7 @@ public class PixelArtController {
 
     public void refreshViewFromModel() {
         buildCanvas();
+        applyBrushSizeToCanvases(model.getBrushSize());
         view.setCanvasCellSize(model.getCanvasCellSize());
         view.recenterViewport();
         view.updateBrushTargets(model.getCurrentBrushColor());
@@ -528,9 +529,19 @@ public class PixelArtController {
 
     public void setBrushSize(int size) {
         model.setBrushSize(size);
+        applyBrushSizeToCanvases(model.getBrushSize());
         view.repaintCanvas();
         if (controlBar != null) {
             controlBar.syncSliders();
+        }
+    }
+
+    private void applyBrushSizeToCanvases(int size) {
+        if (canvas != null) {
+            canvas.setBrushSize(size);
+        }
+        if (stampCanvas != null) {
+            stampCanvas.setBrushSize(size);
         }
     }
 
@@ -578,7 +589,13 @@ public class PixelArtController {
     }
 
     private void selectTool(ToolMode mode) {
+        if (mode == null) return;
         model.setToolMode(mode);
+        applyBrushSizeToCanvases(model.getBrushSize());
+        if (controlBar != null) {
+            controlBar.syncSliders();
+        }
+        view.repaintCanvas();
         view.repaintControls();
     }
 

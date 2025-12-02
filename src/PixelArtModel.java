@@ -27,6 +27,7 @@ public class PixelArtModel implements Serializable {
     // Tools and state
     private ColorState colorState = new ColorState();
     private int brushSize = 1;
+    private int[] toolBrushSizes;
     private ToolMode toolMode = ToolMode.BRUSH;
     private int activeLayer = 0;
     private boolean stampUseOwnColors = true;
@@ -46,12 +47,14 @@ public class PixelArtModel implements Serializable {
         int[] currentFrameIndex;
         Color viewportBg;
         List<List<Color[][]>> layerFrames;
+        int[] toolBrushSizes;
     }
 
     public PixelArtModel() {
         initLayers();
         initAnimation();
         initStamp();
+        initToolBrushSizes();
     }
 
     public PixelArtModel(int cols, int rows) {
@@ -61,6 +64,7 @@ public class PixelArtModel implements Serializable {
         initLayers();
         initAnimation();
         initStamp();
+        initToolBrushSizes();
     }
 
     public void initLayers() {
@@ -87,6 +91,10 @@ public class PixelArtModel implements Serializable {
 
     private void initStamp() {
         stampPixels = new Color[16][16];
+    }
+
+    private void initToolBrushSizes() {
+        ensureToolBrushSizes(Math.max(1, brushSize));
     }
 
     // Getters and setters
@@ -203,7 +211,27 @@ public class PixelArtModel implements Serializable {
     }
 
     public void setBrushSize(int size) {
-        this.brushSize = size;
+        ensureToolBrushSizes(Math.max(1, size));
+        ToolMode mode = toolMode != null ? toolMode : ToolMode.BRUSH;
+        int clamped = Math.max(1, size);
+        toolBrushSizes[mode.ordinal()] = clamped;
+        this.brushSize = clamped;
+    }
+
+    public int getBrushSizeForTool(ToolMode mode) {
+        ensureToolBrushSizes(Math.max(1, brushSize));
+        ToolMode resolved = mode != null ? mode : ToolMode.BRUSH;
+        return toolBrushSizes[resolved.ordinal()];
+    }
+
+    public void setBrushSizeForTool(ToolMode mode, int size) {
+        int clamped = Math.max(1, size);
+        ensureToolBrushSizes(clamped);
+        ToolMode resolved = mode != null ? mode : ToolMode.BRUSH;
+        toolBrushSizes[resolved.ordinal()] = clamped;
+        if (resolved == toolMode) {
+            this.brushSize = clamped;
+        }
     }
 
     public ToolMode getToolMode() {
@@ -211,7 +239,47 @@ public class PixelArtModel implements Serializable {
     }
 
     public void setToolMode(ToolMode mode) {
+        if (mode == null) return;
         this.toolMode = mode;
+        ensureToolBrushSizes(Math.max(1, brushSize));
+        this.brushSize = toolBrushSizes[mode.ordinal()];
+    }
+
+    private void ensureToolBrushSizes(int fallback) {
+        int expected = ToolMode.values().length;
+        int fillValue = Math.max(1, fallback);
+        if (toolBrushSizes == null || toolBrushSizes.length != expected) {
+            int[] newSizes = new int[expected];
+            Arrays.fill(newSizes, fillValue);
+            if (toolBrushSizes != null) {
+                for (int i = 0; i < Math.min(toolBrushSizes.length, expected); i++) {
+                    newSizes[i] = Math.max(1, toolBrushSizes[i]);
+                }
+            }
+            toolBrushSizes = newSizes;
+        } else {
+            for (int i = 0; i < toolBrushSizes.length; i++) {
+                if (toolBrushSizes[i] <= 0) {
+                    toolBrushSizes[i] = fillValue;
+                }
+            }
+        }
+    }
+
+    private int[] rebuildToolBrushSizes(int[] stored, int fallback) {
+        int expected = ToolMode.values().length;
+        int fill = Math.max(1, fallback);
+        int[] rebuilt = new int[expected];
+        Arrays.fill(rebuilt, fill);
+        if (stored != null) {
+            for (int i = 0; i < Math.min(stored.length, expected); i++) {
+                int v = stored[i];
+                if (v > 0) {
+                    rebuilt[i] = v;
+                }
+            }
+        }
+        return rebuilt;
     }
 
     public int getActiveLayer() {
@@ -450,6 +518,7 @@ public class PixelArtModel implements Serializable {
         data.currentFrameIndex = currentFrameIndex.clone();
         data.activeLayer = activeLayer;
         data.brushSize = brushSize;
+        data.toolBrushSizes = toolBrushSizes != null ? toolBrushSizes.clone() : null;
         data.red = colorState.getRed();
         data.green = colorState.getGreen();
         data.blue = colorState.getBlue();
@@ -477,7 +546,9 @@ public class PixelArtModel implements Serializable {
                 Math.min(layerVisible.length, data.layerVisible.length));
         animatedLayers = Arrays.copyOf(data.animatedLayers, layerCount);
         currentFrameIndex = Arrays.copyOf(data.currentFrameIndex, layerCount);
-        brushSize = data.brushSize;
+        int defaultBrush = Math.max(1, data.brushSize);
+        toolBrushSizes = rebuildToolBrushSizes(data.toolBrushSizes, defaultBrush);
+        brushSize = toolBrushSizes[toolMode.ordinal()];
         colorState.setFromColor(new Color(data.red, data.green, data.blue));
         frameRate = data.frameRate;
         activeLayer = Math.max(0, Math.min(data.activeLayer, layerCount - 1));
