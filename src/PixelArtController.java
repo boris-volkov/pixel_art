@@ -2,6 +2,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.io.IOException;
+import javax.swing.Timer;
 
 public class PixelArtController {
     private final PixelArtModel model;
@@ -16,6 +17,9 @@ public class PixelArtController {
     private TopBar topBar;
     private StampPanel stampPanel;
     private PixelCanvas stampCanvas;
+    private AnimationPanel animationPanel;
+    private Timer playTimer;
+    private int playCursor = 0;
 
     public PixelArtController(PixelArtModel model, PixelArtView view) {
         this.model = model;
@@ -29,6 +33,7 @@ public class PixelArtController {
         buildControlBar();
         buildTopBar();
         buildStampPanel();
+        buildAnimationPanel();
         view.setViewportBackground(model.getViewportBg());
         view.setCanvasCellSize(model.getCanvasCellSize());
         view.recenterViewport();
@@ -196,6 +201,34 @@ public class PixelArtController {
         view.setStampController(stampPanel);
     }
 
+    private void buildAnimationPanel() {
+        AnimationPanel.Host host = new AnimationPanel.Host() {
+            @Override
+            public boolean isPlaying() { return model.isPlaying(); }
+            @Override
+            public boolean isOnionEnabled() { return model.isOnionEnabled(); }
+            @Override
+            public int frameCount() { return model.getLayerFrames()[model.getActiveLayer()].size(); }
+            @Override
+            public int currentFrameIndex() { return model.getCurrentFrameIndex()[model.getActiveLayer()]; }
+            @Override
+            public void togglePlayback() { PixelArtController.this.togglePlayback(); }
+            @Override
+            public void toggleOnion() { PixelArtController.this.toggleOnion(); }
+            @Override
+            public void addBlankFrame() { PixelArtController.this.addBlankFrame(); repaintTimeline(); }
+            @Override
+            public void deleteCurrentFrame() { PixelArtController.this.deleteCurrentFrame(); repaintTimeline(); }
+            @Override
+            public void duplicateCurrentFrame() { PixelArtController.this.duplicateCurrentFrame(); repaintTimeline(); }
+            @Override
+            public void selectFrame(int index) { PixelArtController.this.selectFrame(index); repaintTimeline(); }
+        };
+        animationPanel = new AnimationPanel(host);
+        view.setAnimationController(animationPanel);
+        view.showAnimationPanel(true);
+    }
+
     private void handleCommand(String input) {
         if (input == null || input.isEmpty()) {
             return;
@@ -227,6 +260,11 @@ public class PixelArtController {
                     int size = Integer.parseInt(parts[1]);
                     setBrushSize(size);
                     view.setConsoleStatus("Brush " + size);
+                }
+                case "animate" -> {
+                    view.showAnimationPanel(true);
+                    repaintTimeline();
+                    view.setConsoleStatus("Animation panel open");
                 }
                 case "background" -> {
                     if (parts.length < 4) {
@@ -424,7 +462,11 @@ public class PixelArtController {
     public void setActiveLayer(int layer) {
         int clamped = Math.max(0, Math.min(model.getLayerCount() - 1, layer));
         model.setActiveLayer(clamped);
+        syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
+        model.applyAllCurrentFrames();
+        view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     public boolean isLayerVisible(int layer) {
@@ -460,6 +502,7 @@ public class PixelArtController {
 
     // Animation
     public void togglePlayback() {
+        model.saveCurrentFrames();
         boolean anyFrames = false;
         for (int i = 0; i < model.getLayerCount(); i++) {
             if (model.getLayerFrames()[i].size() > 1) {
@@ -472,54 +515,155 @@ public class PixelArtController {
             return;
         }
         model.setPlaying(!model.isPlaying());
-        // Start/stop timer logic
+        if (model.isPlaying()) {
+            playCursor = model.getCurrentFrameIndex()[model.getActiveLayer()];
+            startPlayback();
+        } else {
+            stopPlayback();
+        }
         view.repaintControls();
+        repaintTimeline();
     }
 
     public void stepFrame(int delta) {
+        model.saveCurrentFrames();
         model.stepFrame(delta);
         model.applyAllCurrentFrames();
+        view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     public void selectFrame(int index) {
+        model.saveCurrentFrames();
         model.selectFrame(index);
+        syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
+        view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     public void addFrameFromCurrent() {
+        model.saveCurrentFrames();
         model.addFrameFromCurrent();
+        syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
+        view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     public void addBlankFrame() {
+        model.saveCurrentFrames();
         model.addBlankFrame();
+        syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
+        view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     public void duplicateCurrentFrame() {
+        model.saveCurrentFrames();
         model.duplicateCurrentFrame();
+        syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
+        view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     public void deleteCurrentFrame() {
         model.deleteCurrentFrame();
+        syncOtherLayersToActive(model.getCurrentFrameIndex()[model.getActiveLayer()]);
         model.applyAllCurrentFrames();
+        view.repaintCanvas();
         view.repaintControls();
+        repaintTimeline();
     }
 
     public void setFrameRate(int fps) {
         model.setFrameRate(fps);
-        // Update timer if needed
+        if (playTimer != null) {
+            playTimer.setDelay(delayFromFPS());
+            playTimer.setInitialDelay(0);
+        }
+    }
+
+    private void repaintTimeline() {
+        if (animationPanel != null) {
+            animationPanel.repaint();
+        }
+    }
+
+    private void startPlayback() {
+        if (playTimer == null) {
+            playTimer = new Timer(delayFromFPS(), e -> advancePlayback());
+            playTimer.setInitialDelay(0);
+        }
+        playTimer.setDelay(delayFromFPS());
+        playTimer.start();
+    }
+
+    private void stopPlayback() {
+        if (playTimer != null) {
+            playTimer.stop();
+        }
+    }
+
+    private void advancePlayback() {
+        int maxLen = 0;
+        for (int l = 0; l < model.getLayerCount(); l++) {
+            int len = model.getLayerFrames()[l].size();
+            if (len > 0) {
+                maxLen = Math.max(maxLen, len);
+            }
+        }
+        if (maxLen <= 0) {
+            stopPlayback();
+            model.setPlaying(false);
+            view.repaintControls();
+            repaintTimeline();
+            return;
+        }
+        playCursor = (playCursor + 1) % maxLen;
+        int[] idx = model.getCurrentFrameIndex().clone();
+        boolean[] animated = model.getAnimatedLayers();
+        for (int l = 0; l < model.getLayerCount(); l++) {
+            int len = model.getLayerFrames()[l].size();
+            if (len == 0) continue;
+            if (animated != null && l < animated.length && !animated[l]) {
+                continue;
+            }
+            idx[l] = playCursor % len;
+        }
+        model.setCurrentFrameIndex(idx);
+        model.applyAllCurrentFrames();
+        view.repaintCanvas();
+        view.repaintControls();
+        repaintTimeline();
+    }
+
+    private void syncOtherLayersToActive(int activeIndex) {
+        int[] idx = model.getCurrentFrameIndex();
+        for (int l = 0; l < model.getLayerCount(); l++) {
+            if (l == model.getActiveLayer()) continue;
+            int len = model.getLayerFrames()[l].size();
+            if (len == 0) continue;
+            idx[l] = activeIndex % len;
+        }
+        model.setCurrentFrameIndex(idx);
+    }
+
+    private int delayFromFPS() {
+        return (int) Math.max(1, Math.round(1000.0 / Math.max(1, model.getFrameRate())));
     }
 
     public void toggleOnion() {
         model.setOnionEnabled(!model.isOnionEnabled());
         view.repaintCanvas();
+        repaintTimeline();
     }
 
     // Viewport

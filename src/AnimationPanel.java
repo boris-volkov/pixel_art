@@ -10,7 +10,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 class AnimationPanel extends JComponent {
-    private final PixelArtApp app;
+    interface Host {
+        boolean isPlaying();
+        boolean isOnionEnabled();
+        int frameCount();
+        int currentFrameIndex();
+        void togglePlayback();
+        void toggleOnion();
+        void addBlankFrame();
+        void deleteCurrentFrame();
+        void duplicateCurrentFrame();
+        void selectFrame(int index);
+    }
+
+    private final Host host;
     private Rectangle playBounds;
     private Rectangle onionBounds;
     private Rectangle addBounds;
@@ -19,7 +32,11 @@ class AnimationPanel extends JComponent {
     private final List<Rectangle> frameRects = new ArrayList<>();
 
     AnimationPanel(PixelArtApp app) {
-        this.app = app;
+        this(new PixelArtAppHost(app));
+    }
+
+    AnimationPanel(Host host) {
+        this.host = host;
         setOpaque(true);
         setBackground(PixelArtApp.BG);
         setPreferredSize(new java.awt.Dimension(0, 110));
@@ -34,34 +51,34 @@ class AnimationPanel extends JComponent {
 
     private void handleClick(int x, int y) {
         if (playBounds != null && playBounds.contains(x, y)) {
-            app.blurConsole(); app.togglePlayback();
+            host.togglePlayback();
             repaint();
             return;
         }
         if (onionBounds != null && onionBounds.contains(x, y)) {
-            app.blurConsole(); app.toggleOnion();
+            host.toggleOnion();
             repaint();
             return;
         }
         if (addBounds != null && addBounds.contains(x, y)) {
-            app.blurConsole(); app.addBlankFrame();
+            host.addBlankFrame();
             repaint();
             return;
         }
         if (deleteBounds != null && deleteBounds.contains(x, y)) {
-            app.blurConsole(); app.deleteCurrentFrame();
+            host.deleteCurrentFrame();
             repaint();
             return;
         }
         if (dupBounds != null && dupBounds.contains(x, y)) {
-            app.blurConsole(); app.duplicateCurrentFrame();
+            host.duplicateCurrentFrame();
             repaint();
             return;
         }
         for (int i = 0; i < frameRects.size(); i++) {
             Rectangle r = frameRects.get(i);
             if (r.contains(x, y)) {
-                app.blurConsole(); app.selectFrame(i);
+                host.selectFrame(i);
                 repaint();
                 break;
             }
@@ -87,8 +104,8 @@ class AnimationPanel extends JComponent {
         deleteBounds = new Rectangle(padding + btnWidth + 6, padding + btnHeight + 6, btnWidth, btnHeight);
         dupBounds = new Rectangle(padding, padding + (btnHeight + 6) * 2, btnWidth, btnHeight);
 
-        drawButton(g2, playBounds, app.isPlaying() ? "STOP" : "PLAY", true);
-        drawButton(g2, onionBounds, "ONION", app.isOnionEnabled());
+        drawButton(g2, playBounds, host.isPlaying() ? "STOP" : "PLAY", true);
+        drawButton(g2, onionBounds, "ONION", host.isOnionEnabled());
         drawButton(g2, addBounds, "+", true);
         drawButton(g2, deleteBounds, "-", true);
         drawButton(g2, dupBounds, "DUP", true);
@@ -97,13 +114,14 @@ class AnimationPanel extends JComponent {
         int frameSize = 32;
         int frameGap = 8;
         frameRects.clear();
-        List<PixelArtApp.FrameData> frames = app.getFramesForActiveLayer();
-        for (int i = 0; i < frames.size(); i++) {
+        int count = host.frameCount();
+        int activeIdx = host.currentFrameIndex();
+        for (int i = 0; i < count; i++) {
             int x = framesStartX + i * (frameSize + frameGap);
             int y = padding;
             Rectangle r = new Rectangle(x, y, frameSize, frameSize);
             frameRects.add(r);
-            boolean active = (i == app.getCurrentFrameIndexForActiveLayer());
+            boolean active = (i == activeIdx);
             g2.setColor(active ? PixelArtApp.ACCENT : PixelArtApp.BUTTON_BG);
             g2.fillRect(r.x, r.y, r.width, r.height);
             g2.setColor(PixelArtApp.BUTTON_BORDER);
@@ -121,5 +139,34 @@ class AnimationPanel extends JComponent {
         g2.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
         Color text = accent ? new Color(120, 220, 120) : PixelArtApp.TEXT;
         PixelFont.drawCentered(g2, label, bounds, 2, text);
+    }
+
+    private static class PixelArtAppHost implements Host {
+        private final PixelArtApp app;
+
+        PixelArtAppHost(PixelArtApp app) {
+            this.app = app;
+        }
+
+        @Override
+        public boolean isPlaying() { return app.isPlaying(); }
+        @Override
+        public boolean isOnionEnabled() { return app.isOnionEnabled(); }
+        @Override
+        public int frameCount() { return app.getFramesForActiveLayer().size(); }
+        @Override
+        public int currentFrameIndex() { return app.getCurrentFrameIndexForActiveLayer(); }
+        @Override
+        public void togglePlayback() { app.togglePlayback(); }
+        @Override
+        public void toggleOnion() { app.toggleOnion(); }
+        @Override
+        public void addBlankFrame() { app.addBlankFrame(); }
+        @Override
+        public void deleteCurrentFrame() { app.deleteCurrentFrame(); }
+        @Override
+        public void duplicateCurrentFrame() { app.duplicateCurrentFrame(); }
+        @Override
+        public void selectFrame(int index) { app.selectFrame(index); }
     }
 }

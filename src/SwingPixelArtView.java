@@ -487,6 +487,9 @@ public class SwingPixelArtView implements PixelArtView {
             animationSlot.revalidate();
             animationSlot.repaint();
         }
+        if (timeline != null) {
+            timeline.setVisible(true);
+        }
     }
 
     @Override
