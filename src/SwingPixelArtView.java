@@ -29,6 +29,8 @@ public class SwingPixelArtView implements PixelArtView {
     private IntConsumer brushSizeCallback;
     private Supplier<ToolMode> toolModeCallback;
     private Consumer<ToolMode> toolSelectCallback;
+    private Runnable flipHCallback;
+    private Runnable flipVCallback;
     private Supplier<Color[][]> stampCallback;
     private Supplier<Color[][][]> onionCallback;
     private IntSupplier activeLayerCallback;
@@ -256,19 +258,28 @@ public class SwingPixelArtView implements PixelArtView {
         bindToolKey(root, KeyEvent.VK_L, ToolMode.BLUR);
         bindToolKey(root, KeyEvent.VK_M, ToolMode.MOVE);
         bindToolKey(root, KeyEvent.VK_R, ToolMode.ROTATE);
+        bindActionKey(root, KeyEvent.VK_H, "flipH", () -> {
+            if (flipHCallback != null) flipHCallback.run();
+        });
+        bindActionKey(root, KeyEvent.VK_V, "flipV", () -> {
+            if (flipVCallback != null) flipVCallback.run();
+        });
     }
 
     private void bindToolKey(JComponent root, int keyCode, ToolMode mode) {
-        String actionKey = "tool_" + mode.name();
+        bindActionKey(root, keyCode, "tool_" + mode.name(), () -> {
+            if (toolSelectCallback != null) toolSelectCallback.accept(mode);
+        });
+    }
+
+    private void bindActionKey(JComponent root, int keyCode, String actionKey, Runnable action) {
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(keyCode, 0), actionKey);
         root.getActionMap().put(actionKey, new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 if (console != null && console.isFocusOwner())
                     return;
-                if (toolSelectCallback != null) {
-                    toolSelectCallback.accept(mode);
-                }
+                action.run();
             }
         });
     }
@@ -418,6 +429,16 @@ public class SwingPixelArtView implements PixelArtView {
     @Override
     public void setToolSelectCallback(Consumer<ToolMode> callback) {
         this.toolSelectCallback = callback;
+    }
+
+    @Override
+    public void setFlipHorizontalCallback(Runnable callback) {
+        this.flipHCallback = callback;
+    }
+
+    @Override
+    public void setFlipVerticalCallback(Runnable callback) {
+        this.flipVCallback = callback;
     }
 
     @Override

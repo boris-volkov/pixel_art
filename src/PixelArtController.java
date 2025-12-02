@@ -56,6 +56,8 @@ public class PixelArtController {
         view.setToolSelectCallback(this::selectTool);
         view.setFrameStepCallback(this::stepFrame);
         view.setToggleOnionCallback(this::toggleOnion);
+        view.setFlipHorizontalCallback(this::flipHorizontal);
+        view.setFlipVerticalCallback(this::flipVertical);
     }
 
     private void buildCanvas() {
@@ -424,61 +426,55 @@ public class PixelArtController {
     // Tool operations
     public void flipHorizontal() {
         recordUndoSnapshot();
-        model.saveCurrentFrames();
         Color[][] layer = model.getLayerCopy(model.getActiveLayer());
         PixelOps.flipHorizontal(layer);
         model.setLayer(model.getActiveLayer(), layer);
-        model.applyAllCurrentFrames();
+        model.saveCurrentFrames();
         view.repaintCanvas();
     }
 
     public void flipVertical() {
         recordUndoSnapshot();
-        model.saveCurrentFrames();
         Color[][] layer = model.getLayerCopy(model.getActiveLayer());
         PixelOps.flipVertical(layer);
         model.setLayer(model.getActiveLayer(), layer);
-        model.applyAllCurrentFrames();
+        model.saveCurrentFrames();
         view.repaintCanvas();
     }
 
     public void blurGaussian(int radius) {
         recordUndoSnapshot();
-        model.saveCurrentFrames();
         Color[][] layer = model.getLayerCopy(model.getActiveLayer());
         PixelOps.blurGaussian(layer, radius);
         model.setLayer(model.getActiveLayer(), layer);
-        model.applyAllCurrentFrames();
+        model.saveCurrentFrames();
         view.repaintCanvas();
     }
 
     public void blurMotion(double angle, int amount) {
         recordUndoSnapshot();
-        model.saveCurrentFrames();
         Color[][] layer = model.getLayerCopy(model.getActiveLayer());
         PixelOps.blurMotion(layer, angle, amount);
         model.setLayer(model.getActiveLayer(), layer);
-        model.applyAllCurrentFrames();
+        model.saveCurrentFrames();
         view.repaintCanvas();
     }
 
     public void ditherFloydSteinberg() {
         recordUndoSnapshot();
-        model.saveCurrentFrames();
         Color[][] layer = model.getLayerCopy(model.getActiveLayer());
         PixelOps.ditherFloydSteinberg(layer, PixelConstants.CANVAS_BG);
         model.setLayer(model.getActiveLayer(), layer);
-        model.applyAllCurrentFrames();
+        model.saveCurrentFrames();
         view.repaintCanvas();
     }
 
     public void ditherOrdered() {
         recordUndoSnapshot();
-        model.saveCurrentFrames();
         Color[][] layer = model.getLayerCopy(model.getActiveLayer());
         PixelOps.ditherOrdered(layer, PixelConstants.CANVAS_BG);
         model.setLayer(model.getActiveLayer(), layer);
-        model.applyAllCurrentFrames();
+        model.saveCurrentFrames();
         view.repaintCanvas();
     }
 

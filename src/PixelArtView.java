@@ -44,6 +44,8 @@ public interface PixelArtView {
 
     void setToolModeCallback(Supplier<ToolMode> callback);
     void setToolSelectCallback(Consumer<ToolMode> callback);
+    void setFlipHorizontalCallback(Runnable callback);
+    void setFlipVerticalCallback(Runnable callback);
 
     void setStampCallback(Supplier<Color[][]> callback);
 
