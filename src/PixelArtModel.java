@@ -8,7 +8,8 @@ public class PixelArtModel implements Serializable {
     private static final long serialVersionUID = 1L;
 
     // Canvas and layers
-    private int gridSize = 128;
+    private int columns = 128;
+    private int rows = 128;
     private int canvasCellSize = 16;
     private int layerCount = 3;
     private Color[][][] layers; // [layer][row][col]
@@ -51,15 +52,12 @@ public class PixelArtModel implements Serializable {
     }
 
     public PixelArtModel() {
-        initLayers();
-        initAnimation();
-        initStamp();
-        initToolBrushSizes();
+        this(128, 128);
     }
 
     public PixelArtModel(int cols, int rows) {
-        this.gridSize = Math.max(cols, rows);
-        this.canvasCellSize = computeCellSizeForGrid(gridSize);
+        this.columns = Math.max(1, cols);
+        this.rows = Math.max(1, rows);
         this.layerCount = 3;
         initLayers();
         initAnimation();
@@ -68,7 +66,7 @@ public class PixelArtModel implements Serializable {
     }
 
     public void initLayers() {
-        layers = new Color[layerCount][gridSize][gridSize];
+        layers = new Color[layerCount][rows][columns];
         layerVisible = new boolean[layerCount];
         Arrays.fill(layerVisible, true);
         layerNames = new String[layerCount];
@@ -83,7 +81,7 @@ public class PixelArtModel implements Serializable {
         animatedLayers = new boolean[layerCount];
         for (int i = 0; i < layerCount; i++) {
             layerFrames[i] = new ArrayList<>();
-            layerFrames[i].add(new FrameData(new Color[gridSize][gridSize]));
+            layerFrames[i].add(new FrameData(new Color[rows][columns]));
             currentFrameIndex[i] = 0;
             animatedLayers[i] = true;
         }
@@ -99,11 +97,18 @@ public class PixelArtModel implements Serializable {
 
     // Getters and setters
     public int getGridSize() {
-        return gridSize;
+        return Math.max(columns, rows);
     }
 
     public void setGridSize(int size) {
-        this.gridSize = size;
+        int clamped = Math.max(1, size);
+        this.columns = clamped;
+        this.rows = clamped;
+    }
+
+    public void setDimensions(int cols, int rows) {
+        this.columns = Math.max(1, cols);
+        this.rows = Math.max(1, rows);
     }
 
     public int getCanvasCellSize() {
@@ -316,11 +321,11 @@ public class PixelArtModel implements Serializable {
 
     // Utility methods
     public int getRows() {
-        return gridSize;
+        return rows;
     }
 
     public int getColumns() {
-        return gridSize;
+        return columns;
     }
 
     public Color getCurrentBrushColor() {
@@ -328,7 +333,7 @@ public class PixelArtModel implements Serializable {
     }
 
     public void setPixel(int row, int col, Color color) {
-        if (row >= 0 && row < gridSize && col >= 0 && col < gridSize) {
+        if (row >= 0 && row < rows && col >= 0 && col < columns) {
             layers[activeLayer][row][col] = color;
         }
     }
@@ -358,9 +363,9 @@ public class PixelArtModel implements Serializable {
     public Color[][] getLayerCopy(int layer) {
         if (layer < 0 || layer >= layerCount)
             return null;
-        Color[][] copy = new Color[gridSize][gridSize];
-        for (int r = 0; r < gridSize; r++) {
-            copy[r] = Arrays.copyOf(layers[layer][r], gridSize);
+        Color[][] copy = new Color[rows][columns];
+        for (int r = 0; r < rows; r++) {
+            copy[r] = Arrays.copyOf(layers[layer][r], columns);
         }
         return copy;
     }
@@ -368,9 +373,9 @@ public class PixelArtModel implements Serializable {
     public void setLayer(int layer, Color[][] data) {
         if (layer < 0 || layer >= layerCount || data == null)
             return;
-        for (int r = 0; r < Math.min(gridSize, data.length); r++) {
+        for (int r = 0; r < Math.min(rows, data.length); r++) {
             if (data[r] != null) {
-                layers[layer][r] = Arrays.copyOf(data[r], gridSize);
+                layers[layer][r] = Arrays.copyOf(data[r], columns);
             }
         }
     }
@@ -420,7 +425,7 @@ public class PixelArtModel implements Serializable {
         animatedLayers = new boolean[count];
         for (int i = 0; i < count; i++) {
             layerFrames[i] = new ArrayList<>();
-            layerFrames[i].add(new FrameData(new Color[gridSize][gridSize]));
+            layerFrames[i].add(new FrameData(new Color[rows][columns]));
             currentFrameIndex[i] = 0;
             animatedLayers[i] = true;
         }
@@ -436,7 +441,7 @@ public class PixelArtModel implements Serializable {
     public void addBlankFrame() {
         List<FrameData> frames = layerFrames[activeLayer];
         int insertAt = Math.min(frames.size(), currentFrameIndex[activeLayer] + 1);
-        FrameData data = new FrameData(new Color[gridSize][gridSize]);
+        FrameData data = new FrameData(new Color[rows][columns]);
         frames.add(insertAt, data);
         currentFrameIndex[activeLayer] = insertAt;
     }
@@ -459,7 +464,7 @@ public class PixelArtModel implements Serializable {
             return;
         frames.remove(currentFrameIndex[activeLayer]);
         if (frames.isEmpty()) {
-            frames.add(new FrameData(new Color[gridSize][gridSize]));
+            frames.add(new FrameData(new Color[rows][columns]));
             currentFrameIndex[activeLayer] = 0;
         } else {
             currentFrameIndex[activeLayer] = Math.max(0, Math.min(currentFrameIndex[activeLayer], frames.size() - 1));
@@ -509,8 +514,8 @@ public class PixelArtModel implements Serializable {
 
     public ProjectData toProjectData() {
         ProjectData data = new ProjectData();
-        data.cols = gridSize;
-        data.rows = gridSize;
+        data.cols = columns;
+        data.rows = rows;
         data.cellSize = canvasCellSize;
         data.layerNames = layerNames.clone();
         data.layerVisible = layerVisible.clone();
@@ -536,7 +541,8 @@ public class PixelArtModel implements Serializable {
     }
 
     public void fromProjectData(ProjectData data) {
-        gridSize = Math.max(data.cols, data.rows);
+        columns = Math.max(1, data.cols);
+        rows = Math.max(1, data.rows);
         canvasCellSize = Math.min(256, Math.max(2, data.cellSize));
         layerCount = data.layerFrames.size();
         initLayers();
@@ -561,7 +567,7 @@ public class PixelArtModel implements Serializable {
                 dest.add(new FrameData(cloneLayer(layer)));
             }
             if (dest.isEmpty()) {
-                dest.add(new FrameData(new Color[gridSize][gridSize]));
+                dest.add(new FrameData(new Color[rows][columns]));
             }
         }
         applyAllCurrentFrames();
@@ -575,11 +581,6 @@ public class PixelArtModel implements Serializable {
             copy[r] = Arrays.copyOf(src[r], src[r].length);
         }
         return copy;
-    }
-
-    private int computeCellSizeForGrid(int grid) {
-        int computed = 640 / grid;
-        return Math.max(2, Math.min(256, computed));
     }
 
     public static class FrameData implements Serializable {

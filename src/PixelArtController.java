@@ -378,7 +378,7 @@ public class PixelArtController {
 
     // Canvas operations
     public void rebuildCanvas(int newCols, int newRows) {
-        model.setGridSize(Math.max(newCols, newRows));
+        model.setDimensions(newCols, newRows);
         model.setCanvasCellSize(computeMaxCellSizeForScreen());
         model.initLayers();
         model.initLayerFrames(model.getLayerCount());
@@ -487,7 +487,6 @@ public class PixelArtController {
         int oldCols = model.getColumns();
         int newRows = oldRows * factor;
         int newCols = oldCols * factor;
-        int newGrid = Math.max(newRows, newCols);
         Color[][][] scaledLayers = new Color[model.getLayerCount()][newRows][newCols];
         for (int l = 0; l < model.getLayerCount(); l++) {
             Color[][] src = model.getLayers()[l];
@@ -501,7 +500,7 @@ public class PixelArtController {
             }
             scaledLayers[l] = dest;
         }
-        model.setGridSize(newGrid);
+        model.setDimensions(newCols, newRows);
         model.setCanvasCellSize(Math.min(model.getCanvasCellSize(), PixelConstants.MAX_CELL_SIZE));
         model.setLayers(scaledLayers);
         model.saveCurrentFrames();
